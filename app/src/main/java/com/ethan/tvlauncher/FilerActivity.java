@@ -331,6 +331,7 @@ public class FilerActivity extends Activity {
         String path = j.optString("path", "");
         boolean pwd = j.optBoolean("pwd");
         boolean code = j.optBoolean("code");
+        boolean limit = j.optBoolean("limit");
         String number = j.optString("number", "");
         String act = j.optString("act", "");
         boolean ready = "complete".equals(j.optString("ready"));
@@ -360,7 +361,9 @@ public class FilerActivity extends Activity {
                 state = "Loading";
             }
         } else {
-            if (code) {
+            if (limit) {
+                state = "Session limit";
+            } else if (code) {
                 state = "Needs code";
             } else if (pwd) {
                 state = signingIn;
@@ -386,7 +389,8 @@ public class FilerActivity extends Activity {
         }
         if (s.status == null) return;
         int colour = state.equals("Alive") ? GREEN
-                : (state.startsWith("Needs") || state.startsWith("Sign-in failed") || state.startsWith("Approve")) ? RED
+                : (state.startsWith("Needs") || state.startsWith("Sign-in failed") || state.startsWith("Approve")
+                        || state.startsWith("Session limit")) ? RED
                 : AMBER;
         s.dot.setTextColor(colour);
         s.status.setText(statusText(s));
@@ -407,6 +411,8 @@ public class FilerActivity extends Activity {
         String note = "";
         if (outlook.state.startsWith("Approve sign-in: ")) {
             note = "Microsoft sign-in: enter " + outlook.state.substring(17) + " on your phone";
+        } else if ("Session limit".equals(aroflo.state)) {
+            note = "AroFlo session limit: continuing signs out one of your other devices. Confirm from AirHQ";
         } else if ("Needs code".equals(aroflo.state)) {
             note = "AroFlo wants a code: send it from AirHQ";
         }
@@ -432,14 +438,24 @@ public class FilerActivity extends Activity {
 
     /** Types a sign-in code (sent from AirHQ) into AroFlo's code screen. */
     boolean enterAroFloCode(String code) {
+        log("AroFlo: code received from phone");
+        return sendToAroFlo("code", "code", code);
+    }
+
+    /** Presses a button on AroFlo's screen by its text (sent from AirHQ). */
+    boolean pressOnAroFlo(String label) {
+        log("AroFlo: asked to press " + label);
+        return sendToAroFlo("press", "label", label);
+    }
+
+    private boolean sendToAroFlo(String kind, String key, String value) {
         final Session s = aroflo;
         final WebView w = s.view;
         if (!running || w == null) return false;
         try {
             JSONObject j = new JSONObject();
-            j.put("kind", "code");
-            j.put("code", code);
-            log("AroFlo: code received from phone");
+            j.put("kind", kind);
+            j.put(key, value);
             w.evaluateJavascript(probeJs.replace("__CREDS__", j.toString()), new ValueCallback<String>() {
                 @Override
                 public void onReceiveValue(String value) {

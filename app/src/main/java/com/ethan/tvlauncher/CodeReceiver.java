@@ -12,6 +12,16 @@ public class CodeReceiver extends BroadcastReceiver {
 
     @Override
     public void onReceive(Context c, Intent intent) {
+        String press = intent.getStringExtra("press");
+        if (press != null && !press.trim().isEmpty()) {
+            FilerActivity f = FilerActivity.instance;
+            boolean sent = f != null && f.pressOnAroFlo(press.trim());
+            setResultCode(sent ? 1 : 0);
+            setResultData(f == null ? "Filer isn't open on the TV"
+                    : sent ? "Asked AroFlo to press " + press.trim() + ", check the Filer log" : "AroFlo session isn't running");
+            return;
+        }
+
         String code = intent.getStringExtra("code");
         if (code == null || code.trim().isEmpty()) {
             setResultCode(0);

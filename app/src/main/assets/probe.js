@@ -46,10 +46,23 @@
   }
   s.code = !!codeIn;
 
+  s.limit = /maximum number of device sessions|user session limit/i.test(text);
+
   var num = q('#idRichContext_DisplaySign, .displaySign');
   if (num) s.number = num.textContent.trim();
 
-  if (c && c.kind === 'code' && c.code) {
+  if (c && c.kind === 'press' && c.label) {
+    // Button press sent from AirHQ, e.g. CONTINUE on AroFlo's session limit screen.
+    var want = c.label.trim().toLowerCase();
+    var els = document.querySelectorAll('button, a, input[type=submit], input[type=button], [role=button], div, span');
+    var hit = null;
+    for (var e2 = 0; e2 < els.length; e2++) {
+      var el = els[e2];
+      var tx = (el.value || el.textContent || '').trim().toLowerCase();
+      if (tx === want && vis(el)) { hit = el; if (/^(button|a|input)$/i.test(el.tagName) || el.getAttribute('role') === 'button') break; }
+    }
+    if (hit) { hit.click(); s.act = 'pressed ' + c.label; } else { s.act = 'no "' + c.label + '" button on screen'; }
+  } else if (c && c.kind === 'code' && c.code) {
     // Code pushed from AirHQ: type it in, tick any "remember this device / 30 days" box, then submit.
     if (codeIn) {
       setVal(codeIn, c.code);
