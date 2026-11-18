@@ -723,7 +723,8 @@ public class FilerActivity extends Activity {
         }
         if (ran < 120000) return;
         if (filerIdle()) {
-            if (++idleTicks >= 3) autoClose("done, nothing left to file");
+            // about a minute of nothing going, so follow-on work (booking plans) lands before it shuts (19/11, Banyula Dr)
+            if (++idleTicks >= 8) autoClose("done, nothing left to file");
         } else {
             idleTicks = 0;
         }
