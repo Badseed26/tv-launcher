@@ -144,6 +144,11 @@ public class FilerActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        // Opened remotely while the TV was off: switch the screen on with it.
+        if (Build.VERSION.SDK_INT >= 27) {
+            setTurnScreenOn(true);
+            setShowWhenLocked(true);
+        }
         if (probeJs == null) probeJs = readAsset("probe.js");
         if (shimJs == null) shimJs = readAsset("gm-shim.js");
 

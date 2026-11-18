@@ -22,6 +22,7 @@ public class HomeButtonService extends AccessibilityService {
         if (Updater.consumeGoHome(this)) goHomeSoon();
         // Starts listening to the TV remote task in Todoist (runs whenever the TV's on).
         Remote.start(this);
+        ListenService.start(this);
     }
 
     /** Press Home a moment after the update settles, and once more to be sure. */

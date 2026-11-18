@@ -23,7 +23,7 @@ final class Remote {
 
     static final String TASK = "6j3H69pvQ9hQ86pX";
     private static final long EVERY_MS = 20000;
-    private static final String HELP = "Commands: open filer, close filer, status, log, reload, press <button text>, code <number>";
+    private static final String HELP = "Commands: wake, open filer, close filer, status, log, reload, press <button text>, code <number>, stay awake on, stay awake off";
 
     private static Remote inst;
 
@@ -108,8 +108,20 @@ final class Remote {
             public void run() {
                 FilerActivity f = FilerActivity.instance;
                 if (f != null) f.remoteLog("Remote: " + cmd);
+                else TvLog.line(c, "Remote: " + cmd);
+                android.os.PowerManager pm = (android.os.PowerManager) c.getSystemService(Context.POWER_SERVICE);
+                boolean screenOn = pm != null && pm.isInteractive();
                 String reply;
-                if (lc.equals("open filer") || lc.equals("open")) {
+                if (lc.equals("wake") || lc.equals("turn on")) {
+                    ListenService.wakeScreen(c);
+                    reply = screenOn ? "TV was already on." : "Turning the TV on. Send status in a few seconds to check.";
+                } else if (lc.equals("stay awake on") || lc.equals("stay awake off")) {
+                    boolean on = lc.endsWith("on");
+                    ListenService.setStayAwake(c, on);
+                    reply = on ? "Stay awake on: the TV keeps listening while it looks off (about 15 W)."
+                            : "Stay awake off: the TV sleeps properly in standby and can't hear the remote till it's switched on.";
+                } else if (lc.equals("open filer") || lc.equals("open")) {
+                    if (!screenOn) ListenService.wakeScreen(c);
                     if (f != null) {
                         reply = "Filer's already open.";
                     } else {
@@ -130,7 +142,9 @@ final class Remote {
                         reply = "Filer closed, both sessions shut down.";
                     }
                 } else if (lc.equals("status")) {
-                    reply = f == null ? "Filer's closed. TV is on." : f.remoteStatus();
+                    String tv = (screenOn ? "TV is on" : "TV looks off (standby) but it's listening")
+                            + (ListenService.stayAwake(c) ? ", stay awake on." : ", stay awake off.");
+                    reply = f == null ? "Filer's closed. " + tv : f.remoteStatus() + "\n" + tv;
                 } else if (lc.equals("log")) {
                     List<String> l = f != null ? f.filerLog(20) : null;
                     if (l == null || l.isEmpty()) {

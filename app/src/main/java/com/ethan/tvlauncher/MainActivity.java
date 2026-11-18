@@ -225,6 +225,7 @@ public class MainActivity extends Activity implements Ui.FocusListener {
         handler.removeCallbacks(tick);
         handler.post(tick);
 
+        ListenService.start(this);
         Updater.homeVisible = true;
         Updater.showPendingConfirm(this);
         Updater.maybeAutoCheck(this);
