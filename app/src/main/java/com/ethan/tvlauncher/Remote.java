@@ -23,7 +23,7 @@ final class Remote {
 
     static final String TASK = "6j3H69pvQ9hQ86pX";
     private static final long EVERY_MS = 20000;
-    private static final String HELP = "Commands: wake, open filer, close filer, status, log, reload, press <button text>, code <number>, stay awake on, stay awake off";
+    private static final String HELP = "Commands: wake, open filer, close filer, status, log, reload, press <button text>, code <number>, stay awake on, stay awake off, check mail, mail check on, mail check off, mail check opens on, mail check opens off";
 
     private static Remote inst;
 
@@ -101,6 +101,22 @@ final class Remote {
         }
     }
 
+    private void say(final String token, String text) {
+        final String out = "TV: " + text;
+        bg.post(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    JSONObject b = new JSONObject();
+                    b.put("task_id", TASK);
+                    b.put("content", out.length() > 14000 ? out.substring(0, 14000) : out);
+                    Http.todoist(token, "POST", "comments", b);
+                } catch (Exception ignored) {
+                }
+            }
+        });
+    }
+
     private void handle(final String token, final String cmd) {
         final String lc = cmd.toLowerCase(Locale.ROOT);
         main.post(new Runnable() {
@@ -117,6 +133,28 @@ final class Remote {
                     // Try 2: a screen that asks Android to switch the TV on as it opens
                     if (!screenOn) WakeActivity.start(c, false);
                     reply = screenOn ? "TV was already on." : "Turning the TV on. Send status in a few seconds to check.";
+                } else if (lc.equals("check mail") || lc.equals("peek")) {
+                    if (f != null) {
+                        reply = "Filer's open, it's watching the mail itself.";
+                    } else {
+                        ListenService.peekNow(c, new Peek.Done() {
+                            @Override
+                            public void done(Peek.Result r) {
+                                say(token, r.summary());
+                            }
+                        });
+                        reply = "Checking the mail, back in a minute.";
+                    }
+                } else if (lc.equals("mail check on") || lc.equals("mail check off")) {
+                    boolean on = lc.endsWith("on");
+                    ListenService.setPeekOn(c, on);
+                    reply = on ? "Mail check on: every 5 min while the TV's off or on the home screen."
+                            : "Mail check off.";
+                } else if (lc.equals("mail check opens on") || lc.equals("mail check opens off")) {
+                    boolean on = lc.endsWith("on");
+                    ListenService.setPeekOpens(c, on);
+                    reply = on ? "A builder email will now wake the TV and run the Filer, then put it back to sleep."
+                            : "Mail check will only log what it finds, it won't open the Filer.";
                 } else if (lc.equals("stay awake on") || lc.equals("stay awake off")) {
                     boolean on = lc.endsWith("on");
                     ListenService.setStayAwake(c, on);
@@ -148,7 +186,10 @@ final class Remote {
                     }
                 } else if (lc.equals("status")) {
                     String tv = (screenOn ? "TV is on" : "TV looks off (standby) but it's listening")
-                            + (ListenService.stayAwake(c) ? ", stay awake on." : ", stay awake off.");
+                            + (ListenService.stayAwake(c) ? ", stay awake on" : ", stay awake off")
+                            + (ListenService.peekOn(c) ? ", mail check on" + (ListenService.peekOpens(c) ? " (opens the Filer)" : " (log only)") : ", mail check off") + "."
+                            + (Peek.last.isEmpty() ? "" : "\nLast " + Peek.last)
+                            + (f != null && f.isAuto() ? "\nThis Filer was opened by the mail check." : "");
                     reply = f == null ? "Filer's closed. " + tv : f.remoteStatus() + "\n" + tv;
                 } else if (lc.equals("log")) {
                     List<String> l = f != null ? f.filerLog(20) : null;

@@ -15,10 +15,16 @@ import android.view.WindowManager;
 public class WakeActivity extends Activity {
 
     static void start(Context c, boolean openFiler) {
+        start(c, openFiler, false, false);
+    }
+
+    static void start(Context c, boolean openFiler, boolean auto, boolean wasOff) {
         Context from = HomeButtonService.instance != null ? HomeButtonService.instance : c;
         Intent i = new Intent(from, WakeActivity.class);
         i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         i.putExtra("filer", openFiler);
+        i.putExtra("auto", auto);
+        i.putExtra("wasOff", wasOff);
         try {
             from.startActivity(i);
         } catch (Exception e) {
@@ -50,6 +56,8 @@ public class WakeActivity extends Activity {
                 TvLog.line(WakeActivity.this, "Wake screen: TV " + (on ? "is on" : "still off"));
                 Intent next = new Intent(WakeActivity.this, filer ? FilerActivity.class : MainActivity.class);
                 next.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                next.putExtra("auto", getIntent().getBooleanExtra("auto", false));
+                next.putExtra("wasOff", getIntent().getBooleanExtra("wasOff", false));
                 startActivity(next);
                 finish();
             }

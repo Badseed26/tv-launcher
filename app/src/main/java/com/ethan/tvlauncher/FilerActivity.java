@@ -117,6 +117,13 @@ public class FilerActivity extends Activity {
     private Session outlook;
     private Session aroflo;
 
+    // Auto run (opened by the mail check): closes itself once the filer's done, and puts the TV back to sleep
+    // if it was off. A Filer opened by hand never closes itself.
+    private boolean auto;
+    private boolean autoWasOff;
+    private long openedAt;
+    private int idleTicks;
+
     /** One hidden browser session (Outlook or AroFlo). */
     private final class Session {
         final String name;
@@ -152,13 +159,18 @@ public class FilerActivity extends Activity {
         if (probeJs == null) probeJs = readAsset("probe.js");
         if (shimJs == null) shimJs = readAsset("gm-shim.js");
 
+        Peek.cancel();
+        auto = getIntent().getBooleanExtra("auto", false);
+        autoWasOff = getIntent().getBooleanExtra("wasOff", false);
+        openedAt = System.currentTimeMillis();
         outlook = new Session("Outlook", OUTLOOK_URL);
         aroflo = new Session("AroFlo", AROFLO_URL);
 
         buildUi();
         running = true;
         instance = this;
-        log("Filer started (test build)");
+        log(auto ? "Filer opened by the mail check" + (autoWasOff ? " (TV was off)" : " (TV was on the home screen)")
+                : "Filer started");
         if (!Secrets.has(this, Secrets.MS_PASS) || !Secrets.has(this, Secrets.AROFLO_PASS)) {
             log("No logins saved yet, sign in with Show Outlook / Show AroFlo");
         }
@@ -184,7 +196,7 @@ public class FilerActivity extends Activity {
                         } else {
                             log("Couldn't get the filer script, running sign-in only");
                         }
-                        if (filerTitle != null) filerTitle.setText("Filer  \u00B7  build " + Updater.currentVersion(FilerActivity.this)
+                        if (filerTitle != null) filerTitle.setText((auto ? "Filer (auto run)" : "Filer") + "  \u00B7  build " + Updater.currentVersion(FilerActivity.this)
                                 + (filerVersion.isEmpty() ? "" : "  \u00B7  script " + filerVersion));
                         startSession(outlook);
                         startSession(aroflo);
@@ -494,6 +506,7 @@ public class FilerActivity extends Activity {
             updateRam();
             refreshAges();
             renderLog();
+            if (auto) checkAutoDone();
             handler.postDelayed(this, TICK_MS);
         }
     };
@@ -687,6 +700,68 @@ public class FilerActivity extends Activity {
         ActivityManager.MemoryInfo mi = new ActivityManager.MemoryInfo();
         am.getMemoryInfo(mi);
         return mi.availMem / (1024 * 1024);
+    }
+
+    /** Auto run: close once the filer's had time to look and has nothing going, or give up after 12 min. */
+    private void checkAutoDone() {
+        long ran = System.currentTimeMillis() - openedAt;
+        try {
+            String dev = store == null ? null : store.getJson("wfDev");
+            if (dev != null && new JSONObject(dev).optBoolean("ok", true) == false && ran > 60000) {
+                autoClose("the filer's running on another device");
+                return;
+            }
+        } catch (Exception ignored) {
+        }
+        if (ran > 12 * 60000) {
+            autoClose("ran 12 min, closing anyway");
+            return;
+        }
+        if (ran > 5 * 60000 && !("Alive".equals(outlook.state) && "Alive".equals(aroflo.state))) {
+            autoClose("couldn't get both signed in (Outlook: " + outlook.state + ", AroFlo: " + aroflo.state + ")");
+            return;
+        }
+        if (ran < 120000) return;
+        if (filerIdle()) {
+            if (++idleTicks >= 3) autoClose("done, nothing left to file");
+        } else {
+            idleTicks = 0;
+        }
+    }
+
+    /** Both pages up, nothing queued or mid way, and both filer tabs saying they're idle. */
+    private boolean filerIdle() {
+        if (!"Alive".equals(outlook.state) || !"Alive".equals(aroflo.state) || store == null) return false;
+        try {
+            String p = store.getJson("wfPending");
+            if (p != null && !p.equals("null")) return false;
+            String rr = store.getJson("wfReread");
+            if (rr != null && new JSONArray(rr).length() > 0) return false;
+            String jobs = store.getJson("wfJobs");
+            if (jobs != null) {
+                JSONArray a = new JSONArray(jobs);
+                for (int i = 0; i < a.length(); i++) {
+                    JSONObject j = a.optJSONObject(i);
+                    if (j != null && "new".equals(j.optString("status"))) return false;
+                }
+            }
+            String mail = filerChip("mail").toLowerCase(Locale.ROOT), af = filerChip("af").toLowerCase(Locale.ROOT);
+            return mail.startsWith("watching") && af.startsWith("idle");
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private void autoClose(String why) {
+        if (!running) return;
+        log("Auto run: " + why);
+        final boolean sleep = autoWasOff;
+        finish();
+        if (sleep) HomeButtonService.sleepTvSoon(getApplicationContext());
+    }
+
+    boolean isAuto() {
+        return auto;
     }
 
     /** Lets the saved login be tried again (after the session limit or a command from AirHQ). */
@@ -906,7 +981,8 @@ public class FilerActivity extends Activity {
         cover.addView(panel, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
-        TextView title = Ui.text(this, "Filer  \u00B7  build " + Updater.currentVersion(this), 26, Ui.TEXT_PRIMARY, Ui.LIGHT);
+        TextView title = Ui.text(this, (getIntent().getBooleanExtra("auto", false) ? "Filer (auto run)" : "Filer")
+                + "  \u00B7  build " + Updater.currentVersion(this), 26, Ui.TEXT_PRIMARY, Ui.LIGHT);
         filerTitle = title;
         panel.addView(title);
         TextView sub = Ui.text(this, "Test build. Close this screen and everything shuts down.", 13, DIM, Ui.REGULAR);

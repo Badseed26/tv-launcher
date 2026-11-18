@@ -37,6 +37,28 @@ public class HomeButtonService extends AccessibilityService {
         handler.postDelayed(home, 4000);
     }
 
+    /** After an auto run that started with the TV off: go home, then put the TV back to sleep. */
+    static void sleepTvSoon(final android.content.Context c) {
+        final HomeButtonService h = instance;
+        if (h == null) {
+            TvLog.line(c, "Auto run: couldn't put the TV back to sleep (helper not running)");
+            return;
+        }
+        h.handler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                h.performGlobalAction(GLOBAL_ACTION_HOME);
+            }
+        }, 800);
+        h.handler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                boolean ok = android.os.Build.VERSION.SDK_INT >= 28 && h.performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN);
+                TvLog.line(c, ok ? "Auto run: TV back to sleep" : "Auto run: couldn't put the TV back to sleep");
+            }
+        }, 3000);
+    }
+
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
     }

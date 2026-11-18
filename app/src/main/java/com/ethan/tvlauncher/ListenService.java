@@ -39,6 +39,26 @@ public class ListenService extends Service {
         }
     }
 
+    static final long PEEK_MS = 5 * 60000;
+
+    /** The screen-off mail check, every 5 min while the TV's off or on the home screen. */
+    static boolean peekOn(Context c) {
+        return prefs(c).getBoolean("peek", true);
+    }
+
+    static void setPeekOn(Context c, boolean on) {
+        prefs(c).edit().putBoolean("peek", on).apply();
+    }
+
+    /** Whether a hit wakes the TV and runs the Filer. Off while we're still testing the check. */
+    static boolean peekOpens(Context c) {
+        return prefs(c).getBoolean("peekOpens", false);
+    }
+
+    static void setPeekOpens(Context c, boolean on) {
+        prefs(c).edit().putBoolean("peekOpens", on).apply();
+    }
+
     static boolean stayAwake(Context c) {
         return prefs(c).getBoolean("stayAwake", true);
     }
@@ -114,9 +134,54 @@ public class ListenService extends Service {
                 TvLog.line(ListenService.this, on ? "TV switched on" : "TV switched off (standby), still listening");
                 screenWasOn = on;
             }
+            peekIfDue(on);
             bg.postDelayed(this, 60000);
         }
     };
+
+    private long lastPeek;
+
+    private void peekIfDue(final boolean screenOn) {
+        final Context c = this;
+        if (!peekOn(c) || System.currentTimeMillis() - lastPeek < PEEK_MS) return;
+        new android.os.Handler(android.os.Looper.getMainLooper()).post(new Runnable() {
+            @Override
+            public void run() {
+                if (FilerActivity.instance != null || Peek.busy) return; // Filer's open: it's watching mail itself
+                if (screenOn && !Updater.homeVisible) return; // something's being watched, wait
+                lastPeek = System.currentTimeMillis();
+                peekNow(c, null);
+            }
+        });
+    }
+
+    /** Main thread. Runs the check, logs it, and opens the Filer on a hit if that's switched on. */
+    static void peekNow(final Context c, final Peek.Done after) {
+        Peek.run(c, new Peek.Done() {
+            @Override
+            public void done(Peek.Result r) {
+                String extra = "";
+                if (r.relevant > 0) extra = peekOpens(c) ? openForMail(c, r) : " (test build: not opening the Filer)";
+                TvLog.line(c, r.summary() + extra);
+                if (after != null) after.done(r);
+            }
+        });
+    }
+
+    /** A builder email's in: wake the TV if it's off and run the Filer, which closes itself once it's filed it. */
+    private static String openForMail(final Context c, Peek.Result r) {
+        if (FilerActivity.instance != null) return " Filer's already open.";
+        android.os.PowerManager pm = (android.os.PowerManager) c.getSystemService(Context.POWER_SERVICE);
+        boolean on = pm != null && pm.isInteractive();
+        if (on && !Updater.homeVisible) return " Not opening the Filer, something's on the TV.";
+        // the same email doesn't open it more than once an hour (say the filer skipped it, or the PC's got it)
+        long was = prefs(c).getLong("openedFor", 0), at = prefs(c).getLong("openedAt", 0);
+        if (was == r.newestRelevant && System.currentTimeMillis() - at < 60 * 60000) return " Already opened the Filer for this one.";
+        prefs(c).edit().putLong("openedFor", r.newestRelevant).putLong("openedAt", System.currentTimeMillis()).apply();
+        if (!on) wakeScreen(c);
+        WakeActivity.start(c, true, true, !on);
+        return " Opening the Filer" + (on ? "." : " (waking the TV).");
+    }
 
     /** Turns the TV's screen back on (only works if the TV's awake enough to hear the remote). */
     @SuppressWarnings("deprecation")
