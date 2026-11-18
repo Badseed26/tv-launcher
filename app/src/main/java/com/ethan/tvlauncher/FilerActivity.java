@@ -130,6 +130,7 @@ public class FilerActivity extends Activity {
             log("No logins saved yet, sign in with Show Outlook / Show AroFlo");
         }
 
+        freeUpRam();
         startSession(outlook);
         startSession(aroflo);
         handler.postDelayed(tick, 3000);
@@ -570,6 +571,39 @@ public class FilerActivity extends Activity {
                 log(s.name + ": tapped it");
             }
         }, 400);
+    }
+
+    /** Apps that just sit in RAM after you've used them. Closed when the Filer opens; they reopen normally. */
+    private static final String[] LEFTOVERS = {
+            "com.spotify.tv.android", "com.google.android.youtube.tv", "com.netflix.ninja",
+            "com.disney.disneyplus", "au.com.stan.and", "com.cbs.ca", "au.net.abc.iview",
+            "com.apple.atve.androidtv.appletv", "com.android.vending",
+            "com.google.android.packageinstaller",
+    };
+
+    private void freeUpRam() {
+        final ActivityManager am = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
+        final long before = availMb(am);
+        for (String pkg : LEFTOVERS) {
+            try {
+                am.killBackgroundProcesses(pkg);
+            } catch (Exception ignored) {
+            }
+        }
+        handler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                if (!running) return;
+                long freed = availMb(am) - before;
+                log("Closed leftover apps" + (freed > 0 ? ", freed about " + freed + " MB" : ""));
+            }
+        }, 1500);
+    }
+
+    private static long availMb(ActivityManager am) {
+        ActivityManager.MemoryInfo mi = new ActivityManager.MemoryInfo();
+        am.getMemoryInfo(mi);
+        return mi.availMem / (1024 * 1024);
     }
 
     /** Lets the saved login be tried again (after the session limit or a command from AirHQ). */
