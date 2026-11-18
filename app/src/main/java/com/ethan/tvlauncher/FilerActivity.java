@@ -13,6 +13,9 @@ import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.graphics.Bitmap;
 import android.os.Message;
+import android.os.SystemClock;
+import android.view.InputDevice;
+import android.view.MotionEvent;
 import android.webkit.ConsoleMessage;
 import android.webkit.CookieManager;
 import android.webkit.JsResult;
@@ -487,6 +490,9 @@ public class FilerActivity extends Activity {
         String act = j.optString("act", "");
         boolean ready = "complete".equals(j.optString("ready"));
 
+        JSONObject tap = j.optJSONObject("tap");
+        if (tap != null) realTap(s, tap);
+
         if (!act.isEmpty()) {
             log(s.name + ": " + act);
             if (act.contains("password")) {
@@ -534,6 +540,36 @@ public class FilerActivity extends Activity {
         }
         setState(s, state);
         updateSignInNote();
+    }
+
+    /** Sends a real touch tap to the hidden page at the spot the page reported (looks like a finger, not code). */
+    private void realTap(final Session s, JSONObject t) {
+        final WebView w = s.view;
+        if (w == null || w.getWidth() == 0) {
+            log(s.name + ": couldn't tap, page not laid out");
+            return;
+        }
+        double vw = t.optDouble("vw", 0), vh = t.optDouble("vh", 0);
+        if (vw <= 0 || vh <= 0) return;
+        final float x = (float) (t.optDouble("x") * w.getWidth() / vw);
+        final float y = (float) (t.optDouble("y") * w.getHeight() / vh);
+        // Short pause so the page has scrolled the button into place.
+        handler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                if (!running || w != s.view) return;
+                long down = SystemClock.uptimeMillis();
+                MotionEvent d = MotionEvent.obtain(down, down, MotionEvent.ACTION_DOWN, x, y, 0);
+                d.setSource(InputDevice.SOURCE_TOUCHSCREEN);
+                w.dispatchTouchEvent(d);
+                d.recycle();
+                MotionEvent u = MotionEvent.obtain(down, down + 80, MotionEvent.ACTION_UP, x, y, 0);
+                u.setSource(InputDevice.SOURCE_TOUCHSCREEN);
+                w.dispatchTouchEvent(u);
+                u.recycle();
+                log(s.name + ": tapped it");
+            }
+        }, 400);
     }
 
     /** Lets the saved login be tried again (after the session limit or a command from AirHQ). */

@@ -61,7 +61,19 @@
       var tx = (el.value || el.textContent || '').trim().toLowerCase();
       if (tx === want && vis(el)) { hit = el; if (/^(button|a|input)$/i.test(el.tagName) || el.getAttribute('role') === 'button') break; }
     }
-    if (hit) { hit.click(); s.act = 'pressed ' + c.label; } else { s.act = 'no "' + c.label + '" button on screen'; }
+    if (hit) {
+      // Don't click from code (sites can spot that). Report where it is so the app can send a real tap.
+      hit.scrollIntoView({ block: 'center', inline: 'center' });
+      var rr = hit.getBoundingClientRect();
+      var vv = window.visualViewport;
+      s.tap = {
+        x: rr.left + rr.width / 2 - (vv ? vv.offsetLeft : 0),
+        y: rr.top + rr.height / 2 - (vv ? vv.offsetTop : 0),
+        vw: vv ? vv.width : window.innerWidth,
+        vh: vv ? vv.height : window.innerHeight
+      };
+      s.act = 'found ' + c.label;
+    } else { s.act = 'no "' + c.label + '" button on screen'; }
   } else if (c && c.kind === 'code' && c.code) {
     // Code pushed from AirHQ: type it in, tick any "remember this device / 30 days" box, then submit.
     if (codeIn) {
