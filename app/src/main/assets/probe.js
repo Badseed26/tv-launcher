@@ -127,7 +127,16 @@
       setVal(pwd, c.pass);
       s.act = 'entered AroFlo password';
       later(function () {
-        var b = form.querySelector('button[type=submit], input[type=submit], button');
+        // Prefer AroFlo's OFFICE LOGIN button (not Field Login, not the show-password eye).
+        var b = null, pats = [/office\s*login/i, /^\s*(log\s?in|sign\s?in)\s*$/i];
+        var cands = document.querySelectorAll('button, input[type=submit], a[role=button], [role=button]');
+        for (var pi = 0; pi < pats.length && !b; pi++) {
+          for (var ci = 0; ci < cands.length; ci++) {
+            var tt = (cands[ci].textContent || cands[ci].value || '').trim();
+            if (vis(cands[ci]) && pats[pi].test(tt)) { b = cands[ci]; break; }
+          }
+        }
+        if (!b) b = form.querySelector('button[type=submit], input[type=submit]');
         if (b) b.click(); else if (pwd.form) pwd.form.submit();
       }, 600);
     }

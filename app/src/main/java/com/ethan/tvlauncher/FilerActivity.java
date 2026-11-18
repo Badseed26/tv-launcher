@@ -206,6 +206,7 @@ public class FilerActivity extends Activity {
 
     private void restartSession(Session s, String why) {
         log(s.name + ": " + why + ", restarting it");
+        resetTries(s);
         if (showing == s) hideSession();
         stopSession(s);
         startSession(s);
@@ -376,10 +377,19 @@ public class FilerActivity extends Activity {
 
         if ("Alive".equals(state)) {
             s.lastAlive = System.currentTimeMillis();
-            if (s.gaveUp) s.gaveUp = false;
+            resetTries(s);
+        } else if ("Session limit".equals(state)) {
+            // Not a wrong password: after Continue AroFlo wants the login again.
+            resetTries(s);
         }
         setState(s, state);
         updateSignInNote();
+    }
+
+    /** Lets the saved login be tried again (after the session limit or a command from AirHQ). */
+    private void resetTries(Session s) {
+        s.passwordFills.clear();
+        s.gaveUp = false;
     }
 
     private void setState(Session s, String state) {
@@ -452,6 +462,7 @@ public class FilerActivity extends Activity {
         final Session s = aroflo;
         final WebView w = s.view;
         if (!running || w == null) return false;
+        resetTries(s);
         try {
             JSONObject j = new JSONObject();
             j.put("kind", kind);
