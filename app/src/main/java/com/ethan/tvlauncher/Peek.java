@@ -58,11 +58,13 @@ final class Peek {
         long newestRelevant;
         String actions = "";
         String blocked = "";
+        String diag = "";
         long ms;
 
         String summary() {
             String head = "Mail check (" + how + ", " + Math.round(ms / 100.0) / 10.0 + " s): ";
-            if (!ok) return head + error + (actions.isEmpty() ? "" : " [seen: " + actions + "]");
+            if (!ok) return head + error + (blocked.isEmpty() ? "" : " Blocked: " + blocked + ".")
+                    + (diag.isEmpty() ? "" : " [read: " + diag + "]") + (actions.isEmpty() ? "" : " [seen: " + actions + "]");
             return head + count + " emails, newest " + newest + ". "
                     + (relevant > 0 ? relevant + " new for the filer: " + firstNew : "Nothing new for the filer.")
                     + (blocked.isEmpty() ? "" : " Blocked: " + blocked);
@@ -92,6 +94,7 @@ final class Peek {
     private final String token = UUID.randomUUID().toString();
     private final List<String> actions = new ArrayList<>();
     private final List<String> blocked = new ArrayList<>();
+    private final List<String> diags = new ArrayList<>();
     private WebView view;
     private WindowManager wm;
     private boolean done;
@@ -294,6 +297,17 @@ final class Peek {
         }
 
         @JavascriptInterface
+        public void diag(String t, final String a) {
+            if (!token.equals(t)) return;
+            main.post(new Runnable() {
+                @Override
+                public void run() {
+                    if (diags.size() < 20) diags.add(a);
+                }
+            });
+        }
+
+        @JavascriptInterface
         public void blocked(String t, final String a) {
             if (!token.equals(t)) return;
             main.post(new Runnable() {
@@ -337,6 +351,7 @@ final class Peek {
         r.how = (replayNote.isEmpty() ? "" : replayNote + ", then ") + how;
         r.actions = join(actions);
         r.blocked = join(blocked);
+        r.diag = join(diags);
         if (items == null) {
             r.error = error == null ? "nothing" : error;
         } else {
@@ -417,7 +432,7 @@ final class Peek {
     }
 
     private static void walk(Object o, int d, List<JSONObject> out, HashSet<String> keys, int[] n) throws Exception {
-        if (o == null || d > 14 || n[0] > 4000) return;
+        if (o == null || d > 30 || n[0] > 400000) return;
         n[0]++;
         if (o instanceof JSONArray) {
             JSONArray a = (JSONArray) o;
