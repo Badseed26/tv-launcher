@@ -11,7 +11,7 @@ android {
     defaultConfig {
         applicationId "com.ethan.tvlauncher"
         minSdk 21
-        targetSdk 28
+        targetSdk 34
         versionCode runNumber
         versionName "1.0." + runNumber
     }
