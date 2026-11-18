@@ -60,6 +60,9 @@ public class FilerActivity extends Activity {
 
     private static String probeJs;
 
+    /** The open Filer screen, so a code pushed from AirHQ can reach it. */
+    static volatile FilerActivity instance;
+
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Random random = new Random();
     private final ArrayDeque<String> lines = new ArrayDeque<>();
@@ -110,6 +113,7 @@ public class FilerActivity extends Activity {
 
         buildUi();
         running = true;
+        instance = this;
         log("Filer started (test build)");
         if (!Secrets.has(this, Secrets.MS_PASS) || !Secrets.has(this, Secrets.AROFLO_PASS)) {
             log("No logins saved yet, sign in with Show Outlook / Show AroFlo");
@@ -141,6 +145,7 @@ public class FilerActivity extends Activity {
     private void shutdown() {
         if (!running) return;
         running = false;
+        if (instance == this) instance = null;
         handler.removeCallbacksAndMessages(null);
         stopSession(outlook);
         stopSession(aroflo);
@@ -403,7 +408,7 @@ public class FilerActivity extends Activity {
         if (outlook.state.startsWith("Approve sign-in: ")) {
             note = "Microsoft sign-in: enter " + outlook.state.substring(17) + " on your phone";
         } else if ("Needs code".equals(aroflo.state)) {
-            note = "AroFlo wants a code: use Show AroFlo to enter it (test build)";
+            note = "AroFlo wants a code: send it from AirHQ";
         }
         signInNote.setText(note);
         signInNote.setVisibility(note.isEmpty() ? View.GONE : View.VISIBLE);
@@ -422,6 +427,28 @@ public class FilerActivity extends Activity {
         if (now - lastRamLog > 5 * 60 * 1000) {
             lastRamLog = now;
             log(txt);
+        }
+    }
+
+    /** Types a sign-in code (sent from AirHQ) into AroFlo's code screen. */
+    boolean enterAroFloCode(String code) {
+        final Session s = aroflo;
+        final WebView w = s.view;
+        if (!running || w == null) return false;
+        try {
+            JSONObject j = new JSONObject();
+            j.put("kind", "code");
+            j.put("code", code);
+            log("AroFlo: code received from phone");
+            w.evaluateJavascript(probeJs.replace("__CREDS__", j.toString()), new ValueCallback<String>() {
+                @Override
+                public void onReceiveValue(String value) {
+                    if (running && w == s.view) handleProbe(s, value);
+                }
+            });
+            return true;
+        } catch (Exception e) {
+            return false;
         }
     }
 

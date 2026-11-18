@@ -37,12 +37,54 @@
       if (/code|otp|token|verif|one-time|2fa|mfa/.test(k)) { codeIn = e; break; }
     }
   }
+  if (!pwd && !codeIn && /code|verif|authenticat|two.?factor|2fa/i.test(text)) {
+    // Fallback: a page talking about a code with a single text box on it.
+    var boxes1 = [];
+    var all = document.querySelectorAll('input[type=text], input[type=number], input[type=tel], input:not([type])');
+    for (var a = 0; a < all.length; a++) if (vis(all[a])) boxes1.push(all[a]);
+    if (boxes1.length === 1) codeIn = boxes1[0];
+  }
   s.code = !!codeIn;
 
   var num = q('#idRichContext_DisplaySign, .displaySign');
   if (num) s.number = num.textContent.trim();
 
-  if (c && c.kind === 'ms') {
+  if (c && c.kind === 'code' && c.code) {
+    // Code pushed from AirHQ: type it in, tick any "remember this device / 30 days" box, then submit.
+    if (codeIn) {
+      setVal(codeIn, c.code);
+      var notes = ['code entered'];
+      var boxes = document.querySelectorAll('input[type=checkbox]');
+      for (var b = 0; b < boxes.length; b++) {
+        var bx = boxes[b];
+        var lab = '';
+        if (bx.id) { var l1 = document.querySelector('label[for="' + bx.id + '"]'); if (l1) lab += l1.textContent; }
+        var l2 = bx.closest('label'); if (l2) lab += ' ' + l2.textContent;
+        if (bx.parentElement) lab += ' ' + bx.parentElement.textContent;
+        lab += ' ' + (bx.name || '') + ' ' + (bx.id || '');
+        if (/remember|trust|30|don.?t ask|days/i.test(lab)) {
+          if (!bx.checked) { bx.click(); if (!bx.checked) { bx.checked = true; bx.dispatchEvent(new Event('change', { bubbles: true })); } }
+          notes.push('remember ticked');
+          break;
+        }
+      }
+      var cform = codeIn.form || document;
+      later(function () {
+        var btn = null;
+        var cands = cform.querySelectorAll('button, input[type=submit], input[type=button], a[role=button]');
+        for (var x = 0; x < cands.length; x++) {
+          var t = (cands[x].textContent || cands[x].value || '').trim();
+          if (vis(cands[x]) && /verify|submit|continue|sign in|log ?in|confirm|next|ok/i.test(t)) { btn = cands[x]; break; }
+        }
+        if (!btn) btn = cform.querySelector('button[type=submit], input[type=submit]');
+        if (btn) btn.click(); else if (codeIn.form) codeIn.form.submit();
+      }, 700);
+      notes.push('submitted');
+      s.act = notes.join(', ');
+    } else {
+      s.act = 'no code box on screen';
+    }
+  } else if (c && c.kind === 'ms') {
     var u = q('input[name=loginfmt]');
     var p = q('input[name=passwd]');
     var next = q('#idSIButton9');

@@ -76,6 +76,11 @@
         </receiver>
 
         <receiver
+            android:name=".CodeReceiver"
+            android:exported="true"
+            android:permission="android.permission.DUMP" />
+
+        <receiver
             android:name=".UpdateReceiver"
             android:exported="false" />
 
