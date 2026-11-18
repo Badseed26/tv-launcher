@@ -73,6 +73,14 @@
             android:screenOrientation="landscape"
             android:windowSoftInputMode="adjustNothing" />
 
+        <activity
+            android:name=".WakeActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen" />
+
         <!-- Logins and keys pushed over ADB. DUMP is held by the ADB shell, not by normal apps,
              so no other app on the TV can send to this. -->
         <receiver

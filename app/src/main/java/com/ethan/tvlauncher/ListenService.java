@@ -123,9 +123,14 @@ public class ListenService extends Service {
     static void wakeScreen(Context c) {
         PowerManager pm = (PowerManager) c.getSystemService(POWER_SERVICE);
         if (pm == null) return;
-        PowerManager.WakeLock w = pm.newWakeLock(PowerManager.SCREEN_BRIGHT_WAKE_LOCK
-                | PowerManager.ACQUIRE_CAUSES_WAKEUP | PowerManager.ON_AFTER_RELEASE, "tvlauncher:wake");
-        w.acquire(10000);
+        // Try 1: wake lock that switches the screen on (some TVs ignore this one)
+        try {
+            PowerManager.WakeLock w = pm.newWakeLock(PowerManager.FULL_WAKE_LOCK
+                    | PowerManager.ACQUIRE_CAUSES_WAKEUP | PowerManager.ON_AFTER_RELEASE, "tvlauncher:wake");
+            w.acquire(10000);
+        } catch (Exception e) {
+            TvLog.line(c, "Wake: wake lock refused: " + e.getMessage());
+        }
     }
 
     @Override

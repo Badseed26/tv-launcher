@@ -114,6 +114,8 @@ final class Remote {
                 String reply;
                 if (lc.equals("wake") || lc.equals("turn on")) {
                     ListenService.wakeScreen(c);
+                    // Try 2: a screen that asks Android to switch the TV on as it opens
+                    if (!screenOn) WakeActivity.start(c, false);
                     reply = screenOn ? "TV was already on." : "Turning the TV on. Send status in a few seconds to check.";
                 } else if (lc.equals("stay awake on") || lc.equals("stay awake off")) {
                     boolean on = lc.endsWith("on");
@@ -124,6 +126,9 @@ final class Remote {
                     if (!screenOn) ListenService.wakeScreen(c);
                     if (f != null) {
                         reply = "Filer's already open.";
+                    } else if (!screenOn) {
+                        WakeActivity.start(c, true);
+                        reply = "Turning the TV on and opening the Filer. Send status in a minute to check.";
                     } else {
                         Intent i = new Intent(c, FilerActivity.class);
                         i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
