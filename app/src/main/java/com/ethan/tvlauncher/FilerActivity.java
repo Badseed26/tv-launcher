@@ -15,6 +15,7 @@ import android.graphics.Bitmap;
 import android.os.Message;
 import android.os.SystemClock;
 import android.view.InputDevice;
+import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.webkit.ConsoleMessage;
 import android.webkit.CookieManager;
@@ -726,8 +727,45 @@ public class FilerActivity extends Activity {
         }
         webHolder.setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);
         cover.setVisibility(View.VISIBLE);
-        // Put the remote back on the Filer's buttons.
-        if (firstButton != null) firstButton.requestFocus();
+        // Put the remote back on the Filer's buttons (again a moment later, after the page lets go).
+        refocusButtons();
+        handler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                if (showing == null) refocusButtons();
+            }
+        }, 150);
+    }
+
+    private void refocusButtons() {
+        if (firstButton == null) return;
+        if (!firstButton.requestFocus()) firstButton.requestFocusFromTouch();
+    }
+
+    /** While no page is showing, the remote can only ever drive the Filer's own buttons. */
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent e) {
+        if (showing == null && e.getKeyCode() != KeyEvent.KEYCODE_BACK
+                && e.getKeyCode() != KeyEvent.KEYCODE_HOME) {
+            View f = getCurrentFocus();
+            if (f == null || f instanceof WebView || !isInside(f, cover)) {
+                refocusButtons();
+                if (e.getAction() == KeyEvent.ACTION_DOWN
+                        && (e.getKeyCode() == KeyEvent.KEYCODE_DPAD_CENTER || e.getKeyCode() == KeyEvent.KEYCODE_ENTER)) {
+                    return true;
+                }
+            }
+        }
+        return super.dispatchKeyEvent(e);
+    }
+
+    private static boolean isInside(View v, View parent) {
+        android.view.ViewParent p = v.getParent();
+        while (p != null) {
+            if (p == parent) return true;
+            p = p.getParent();
+        }
+        return v == parent;
     }
 
     // ---------------------------------------------------------------- screen
@@ -759,7 +797,7 @@ public class FilerActivity extends Activity {
         cover.addView(panel, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
-        TextView title = Ui.text(this, "Filer", 26, Ui.TEXT_PRIMARY, Ui.LIGHT);
+        TextView title = Ui.text(this, "Filer  \u00B7  build " + Updater.currentVersion(this), 26, Ui.TEXT_PRIMARY, Ui.LIGHT);
         panel.addView(title);
         TextView sub = Ui.text(this, "Test build. Close this screen and everything shuts down.", 13, DIM, Ui.REGULAR);
         LinearLayout.LayoutParams sublp = wrap();
@@ -853,6 +891,7 @@ public class FilerActivity extends Activity {
 
     private View addPill(LinearLayout parent, String label, View.OnClickListener l, boolean gap) {
         TextView p = Ui.pill(this, label, l);
+        p.setFocusableInTouchMode(true);
         p.setTextSize(14);
         LinearLayout.LayoutParams lp = wrap();
         if (gap) lp.leftMargin = Ui.dp(this, 12);
