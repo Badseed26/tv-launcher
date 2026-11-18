@@ -11,7 +11,14 @@ import android.os.Looper;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
+import android.graphics.Bitmap;
+import android.os.Message;
+import android.webkit.ConsoleMessage;
 import android.webkit.CookieManager;
+import android.webkit.JsResult;
+import android.webkit.WebResourceError;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.RenderProcessGoneDetail;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
@@ -167,7 +174,8 @@ public class FilerActivity extends Activity {
         st.setDatabaseEnabled(true);
         st.setUseWideViewPort(true);
         st.setLoadWithOverviewMode(true);
-        st.setSupportMultipleWindows(false);
+        // Pages that open a new window get it loaded in the same hidden view instead.
+        st.setSupportMultipleWindows(true);
         st.setJavaScriptCanOpenWindowsAutomatically(true);
         st.setMediaPlaybackRequiresUserGesture(true);
         st.setUserAgentString(desktopUserAgent());
@@ -180,7 +188,7 @@ public class FilerActivity extends Activity {
             // Keep the page's renderer important even though it's never on screen.
             w.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false);
         }
-        w.setWebChromeClient(new WebChromeClient());
+        w.setWebChromeClient(new Chrome(s));
         w.setWebViewClient(new Client(s));
         w.setFocusable(true);
 
@@ -226,6 +234,27 @@ public class FilerActivity extends Activity {
         }
 
         @Override
+        public void onPageStarted(WebView view, String url, Bitmap favicon) {
+            if (running && view == s.view) log(s.name + " > " + shortUrl(url));
+        }
+
+        @Override
+        public void onReceivedHttpError(WebView view, WebResourceRequest req, WebResourceResponse resp) {
+            if (!running || view != s.view || resp == null) return;
+            if (req.isForMainFrame() || resp.getStatusCode() >= 400 && isSite(req.getUrl().getHost())) {
+                log(s.name + " http " + resp.getStatusCode() + " " + shortUrl(req.getUrl().toString()));
+            }
+        }
+
+        @Override
+        public void onReceivedError(WebView view, WebResourceRequest req, WebResourceError err) {
+            if (!running || view != s.view || err == null) return;
+            if (req.isForMainFrame() || isSite(req.getUrl().getHost())) {
+                log(s.name + " error " + err.getErrorCode() + " " + err.getDescription() + " " + shortUrl(req.getUrl().toString()));
+            }
+        }
+
+        @Override
         public void onPageFinished(WebView view, String url) {
             if (running && view == s.view) probe(s);
         }
@@ -246,6 +275,125 @@ public class FilerActivity extends Activity {
                 }
             }
             return true;
+        }
+    }
+
+    /** Logs console errors and popups, and loads any new window in the same hidden view. */
+    private final class Chrome extends WebChromeClient {
+        private final Session s;
+
+        Chrome(Session s) {
+            this.s = s;
+        }
+
+        @Override
+        public boolean onConsoleMessage(ConsoleMessage m) {
+            if (running && m != null && m.messageLevel() == ConsoleMessage.MessageLevel.ERROR) {
+                String msg = m.message();
+                if (msg != null && msg.length() > 140) msg = msg.substring(0, 140) + "...";
+                log(s.name + " console: " + msg);
+            }
+            return true;
+        }
+
+        @Override
+        public boolean onCreateWindow(WebView view, boolean isDialog, boolean userGesture, Message resultMsg) {
+            if (!running) return false;
+            // Catch the new window's first address and load it in the main view instead.
+            final WebView temp = new WebView(FilerActivity.this);
+            temp.setWebViewClient(new WebViewClient() {
+                private boolean done;
+
+                private void take(String url) {
+                    if (done || url == null || url.equals("about:blank")) return;
+                    done = true;
+                    log(s.name + " opened a new window > " + shortUrl(url) + " (loading it here)");
+                    if (s.view != null) s.view.loadUrl(url);
+                    handler.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            try {
+                                temp.destroy();
+                            } catch (Exception ignored) {
+                            }
+                        }
+                    });
+                }
+
+                @Override
+                public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest req) {
+                    take(req.getUrl().toString());
+                    return true;
+                }
+
+                @Override
+                public void onPageStarted(WebView v, String url, Bitmap favicon) {
+                    take(url);
+                }
+            });
+            WebView.WebViewTransport t = (WebView.WebViewTransport) resultMsg.obj;
+            t.setWebView(temp);
+            resultMsg.sendToTarget();
+            return true;
+        }
+
+        @Override
+        public boolean onJsAlert(WebView view, String url, String message, JsResult result) {
+            log(s.name + " alert: " + clip(message));
+            result.confirm();
+            return true;
+        }
+
+        @Override
+        public boolean onJsConfirm(WebView view, String url, String message, JsResult result) {
+            // A hidden page can't show a yes/no box, so log it and say yes.
+            log(s.name + " confirm box (said yes): " + clip(message));
+            result.confirm();
+            return true;
+        }
+    }
+
+    private static String clip(String m) {
+        if (m == null) return "";
+        m = m.replace('\n', ' ');
+        return m.length() > 140 ? m.substring(0, 140) + "..." : m;
+    }
+
+    /** Web address without the query part, so no tokens end up in the log. */
+    private static String shortUrl(String url) {
+        if (url == null) return "";
+        try {
+            Uri u = Uri.parse(url);
+            String out = u.getHost() + u.getPath();
+            return out.length() > 90 ? out.substring(0, 90) + "..." : out;
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    private static boolean isSite(String host) {
+        if (host == null) return false;
+        host = host.toLowerCase(Locale.ROOT);
+        return host.contains("aroflo") || host.contains("microsoft") || host.contains("office") || host.contains("live.com");
+    }
+
+    /** Last lines of the log file, for AirHQ. */
+    static String tail(Context c, int n) {
+        try {
+            File f = new File(c.getFilesDir(), "filer.log");
+            BufferedReader r = new BufferedReader(new java.io.FileReader(f));
+            ArrayDeque<String> last = new ArrayDeque<>();
+            String line;
+            while ((line = r.readLine()) != null) {
+                last.addLast(line);
+                if (last.size() > n) last.removeFirst();
+            }
+            r.close();
+            StringBuilder sb = new StringBuilder();
+            for (String l : last) sb.append(l).append('\n');
+            return sb.toString();
+        } catch (Exception e) {
+            return "No log yet";
         }
     }
 

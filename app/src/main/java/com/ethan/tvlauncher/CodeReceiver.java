@@ -12,6 +12,12 @@ public class CodeReceiver extends BroadcastReceiver {
 
     @Override
     public void onReceive(Context c, Intent intent) {
+        if (intent.getBooleanExtra("log", false)) {
+            setResultCode(1);
+            setResultData("\n" + FilerActivity.tail(c, 50));
+            return;
+        }
+
         String press = intent.getStringExtra("press");
         if (press != null && !press.trim().isEmpty()) {
             FilerActivity f = FilerActivity.instance;
