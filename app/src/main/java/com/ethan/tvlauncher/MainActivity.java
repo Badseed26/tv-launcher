@@ -97,6 +97,12 @@ public class MainActivity extends Activity implements Ui.FocusListener {
         buttons.setClipToPadding(false);
         // Breathing room so the selected button can grow without hitting anything.
         buttons.setPadding(Ui.dp(this, 12), Ui.dp(this, 8), Ui.dp(this, 12), Ui.dp(this, 12));
+        TextView filer = Ui.pill(this, "Filer", new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                startActivity(new Intent(MainActivity.this, FilerActivity.class));
+            }
+        });
         TextView updates = Ui.pill(this, "Updates", new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -115,7 +121,11 @@ public class MainActivity extends Activity implements Ui.FocusListener {
                 Ui.openSettings(MainActivity.this);
             }
         });
-        buttons.addView(updates);
+        buttons.addView(filer);
+        LinearLayout.LayoutParams ulp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        ulp.leftMargin = Ui.dp(this, 14);
+        buttons.addView(updates, ulp);
         LinearLayout.LayoutParams alp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         alp.leftMargin = Ui.dp(this, 14);
