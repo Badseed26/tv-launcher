@@ -56,6 +56,8 @@ public class MainActivity extends Activity implements Ui.FocusListener {
         super.onCreate(savedInstanceState);
 
         FrameLayout root = new FrameLayout(this);
+        root.setClipChildren(false);
+        root.setClipToPadding(false);
         root.addView(new Ui.BackgroundView(this), new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
@@ -75,6 +77,7 @@ public class MainActivity extends Activity implements Ui.FocusListener {
 
         LinearLayout timeCol = new LinearLayout(this);
         timeCol.setOrientation(LinearLayout.VERTICAL);
+        timeCol.setClipChildren(false);
         clock = Ui.text(this, "", 64, Ui.TEXT_PRIMARY, Ui.LIGHT);
         date = Ui.text(this, "", 18, Ui.TEXT_SECONDARY, Ui.REGULAR);
         timeCol.addView(clock);
@@ -91,6 +94,7 @@ public class MainActivity extends Activity implements Ui.FocusListener {
         LinearLayout buttons = new LinearLayout(this);
         buttons.setOrientation(LinearLayout.HORIZONTAL);
         buttons.setClipChildren(false);
+        buttons.setClipToPadding(false);
         buttons.setPadding(0, Ui.dp(this, 8), 0, 0);
         TextView updates = Ui.pill(this, "Updates", new View.OnClickListener() {
             @Override

@@ -30,6 +30,8 @@ public class AllAppsActivity extends Activity {
         super.onCreate(savedInstanceState);
 
         FrameLayout root = new FrameLayout(this);
+        root.setClipChildren(false);
+        root.setClipToPadding(false);
         root.addView(new Ui.BackgroundView(this), new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
