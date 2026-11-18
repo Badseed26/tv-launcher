@@ -23,7 +23,7 @@ final class Remote {
 
     static final String TASK = "6j3H69pvQ9hQ86pX";
     private static final long EVERY_MS = 20000;
-    private static final String HELP = "Commands: wake, open filer, close filer, status, log, reload, press <button text>, code <number>, stay awake on, stay awake off, check mail, mail check on, mail check off, mail check opens on, mail check opens off";
+    private static final String HELP = "Commands: wake, open filer, close filer, status, log, reload, press <button text>, code <number>, stay awake on, stay awake off, check mail, test mail check, mail check on, mail check off, mail check opens on, mail check opens off";
 
     private static Remote inst;
 
@@ -133,6 +133,18 @@ final class Remote {
                     // Try 2: a screen that asks Android to switch the TV on as it opens
                     if (!screenOn) WakeActivity.start(c, false);
                     reply = screenOn ? "TV was already on." : "Turning the TV on. Send status in a few seconds to check.";
+                } else if (lc.equals("test mail check")) {
+                    if (f != null) {
+                        reply = "Close the Filer first, the test opens it itself.";
+                    } else {
+                        ListenService.peekNow(c, new Peek.Done() {
+                            @Override
+                            public void done(Peek.Result r) {
+                                say(token, r.summary() + " (test: see the log for what happens next)");
+                            }
+                        }, true);
+                        reply = "Test mail check: checking the mail, then waking the TV and running the Filer on the newest builder email.";
+                    }
                 } else if (lc.equals("check mail") || lc.equals("peek")) {
                     if (f != null) {
                         reply = "Filer's open, it's watching the mail itself.";

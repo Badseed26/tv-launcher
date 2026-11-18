@@ -157,11 +157,24 @@ public class ListenService extends Service {
 
     /** Main thread. Runs the check, logs it, and opens the Filer on a hit if that's switched on. */
     static void peekNow(final Context c, final Peek.Done after) {
+        peekNow(c, after, false);
+    }
+
+    /**
+     * test: treat the newest builder email in the list as new (even though the filer's had it) and run the whole thing,
+     * wake, Filer, close, sleep. The filer still goes by its own seen list, so nothing gets filed twice.
+     */
+    static void peekNow(final Context c, final Peek.Done after, final boolean test) {
         Peek.run(c, new Peek.Done() {
             @Override
             public void done(Peek.Result r) {
                 String extra = "";
-                if (r.relevant > 0) extra = peekOpens(c) ? openForMail(c, r) : " (test build: not opening the Filer)";
+                if (test && r.ok) {
+                    Peek.Result t = new Peek.Result();
+                    Peek.analyse(c, r.items, t, true);
+                    extra = t.relevant == 0 ? " TEST: no builder email in the list to test with."
+                            : " TEST: treating " + t.firstNew + " as new." + openForMail(c, t, true);
+                } else if (r.relevant > 0) extra = peekOpens(c) ? openForMail(c, r, false) : " (log only: not opening the Filer)";
                 TvLog.line(c, r.summary() + extra);
                 if (after != null) after.done(r);
             }
@@ -169,14 +182,14 @@ public class ListenService extends Service {
     }
 
     /** A builder email's in: wake the TV if it's off and run the Filer, which closes itself once it's filed it. */
-    private static String openForMail(final Context c, Peek.Result r) {
+    private static String openForMail(final Context c, Peek.Result r, boolean test) {
         if (FilerActivity.instance != null) return " Filer's already open.";
         android.os.PowerManager pm = (android.os.PowerManager) c.getSystemService(Context.POWER_SERVICE);
         boolean on = pm != null && pm.isInteractive();
         if (on && !Updater.homeVisible) return " Not opening the Filer, something's on the TV.";
         // the same email doesn't open it more than once an hour (say the filer skipped it, or the PC's got it)
         long was = prefs(c).getLong("openedFor", 0), at = prefs(c).getLong("openedAt", 0);
-        if (was == r.newestRelevant && System.currentTimeMillis() - at < 60 * 60000) return " Already opened the Filer for this one.";
+        if (!test && was == r.newestRelevant && System.currentTimeMillis() - at < 60 * 60000) return " Already opened the Filer for this one.";
         prefs(c).edit().putLong("openedFor", r.newestRelevant).putLong("openedAt", System.currentTimeMillis()).apply();
         if (!on) wakeScreen(c);
         WakeActivity.start(c, true, true, !on);

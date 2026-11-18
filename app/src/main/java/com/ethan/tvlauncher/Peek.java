@@ -60,6 +60,7 @@ final class Peek {
         String blocked = "";
         String diag = "";
         long ms;
+        JSONArray items;
 
         String summary() {
             String head = "Mail check (" + how + ", " + Math.round(ms / 100.0) / 10.0 + " s): ";
@@ -356,14 +357,15 @@ final class Peek {
             r.error = error == null ? "nothing" : error;
         } else {
             r.ok = true;
-            analyse(c, items, r);
+            r.items = items;
+            analyse(c, items, r, false);
         }
         last = time(System.currentTimeMillis()) + " " + r.summary();
         cb.done(r);
     }
 
     /** Which of these the filer would take: newer than the newest it's seen, from a sender on its list, not a skip. */
-    static void analyse(Context c, JSONArray items, Result r) {
+    static void analyse(Context c, JSONArray items, Result r, boolean ignoreSeen) {
         r.count = items.length();
         GmStore st = GmStore.get(c);
         long newest = num(st.getJson("wfNewest")), startAt = num(st.getJson("wfStartAt"));
@@ -379,8 +381,8 @@ final class Peek {
             if (it == null) continue;
             long t = it.optLong("t");
             if (i == 0) r.newest = time(t) + " from " + cut(it.optString("from"), 30) + ": " + cut(it.optString("subj"), 50);
-            if (newest > 0 && t <= newest) continue;
-            if (startAt > 0 && t < startAt - 60000) continue;
+            if (!ignoreSeen && newest > 0 && t <= newest) continue;
+            if (!ignoreSeen && startAt > 0 && t < startAt - 60000) continue;
             String subj = it.optString("subj");
             if (SKIP_SUBJ.matcher(subj).find()) continue;
             String head = (it.optString("from") + " " + subj + " " + it.optString("prev")).toLowerCase(Locale.ROOT);
