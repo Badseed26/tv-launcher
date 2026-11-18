@@ -118,7 +118,11 @@
       }
     }
   } else if (c && c.kind === 'af') {
-    if (pwd && c.pass && !pwd.value) {
+    // Never fill the login while the session limit box (or any popup) is up: it cancels Continue.
+    var popup = s.limit || q('[role=dialog], [role=alertdialog], .modal.show, .modal.in, .v-dialog--active, .mat-dialog-container');
+    if (popup) {
+      s.act = '';
+    } else if (pwd && c.pass && !pwd.value) {
       var form = pwd.form || document;
       var us = form.querySelectorAll('input[type=text], input[type=email], input:not([type])');
       var uf = null;

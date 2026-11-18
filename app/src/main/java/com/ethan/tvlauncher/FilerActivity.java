@@ -90,6 +90,7 @@ public class FilerActivity extends Activity {
         long lastAlive;
         int noResponse;
         boolean gaveUp;
+        long holdFillUntil;
         final List<Long> passwordFills = new ArrayList<>();
         TextView dot;
         TextView status;
@@ -284,6 +285,7 @@ public class FilerActivity extends Activity {
             if (s == outlook && (host.equals("login.microsoftonline.com") || host.equals("login.live.com"))) {
                 return creds("ms", Secrets.MS_USER, Secrets.MS_PASS);
             }
+            if (s == aroflo && System.currentTimeMillis() < s.holdFillUntil) return "null";
             if (s == aroflo && (host.equals("aroflo.com") || host.endsWith(".aroflo.com"))) {
                 return creds("af", Secrets.AROFLO_USER, Secrets.AROFLO_PASS);
             }
@@ -463,6 +465,8 @@ public class FilerActivity extends Activity {
         final WebView w = s.view;
         if (!running || w == null) return false;
         resetTries(s);
+        // Give AroFlo time to finish what was pressed before the login gets touched again.
+        s.holdFillUntil = System.currentTimeMillis() + 25000;
         try {
             JSONObject j = new JSONObject();
             j.put("kind", kind);
