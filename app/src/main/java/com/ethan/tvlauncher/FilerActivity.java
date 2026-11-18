@@ -269,9 +269,9 @@ public class FilerActivity extends Activity {
 
         s.view = w;
         s.noResponse = 0;
-        // Sits behind the dark cover: laid out full size so the pages render properly.
-        webHolder.addView(w, 0, new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        // Sits behind the dark cover, laid out like a PC window (1600 x 1000). At the TV's own width Outlook squashes the
+        // reading pane and the filer can't see the attachments (18/11, Strafford Rd schedule PDF).
+        webHolder.addView(w, 0, hiddenSize());
         w.loadUrl(s.url);
         setState(s, "Loading");
     }
@@ -805,9 +805,17 @@ public class FilerActivity extends Activity {
 
     // ---------------------------------------------------------------- show / hide (test build)
 
+    private FrameLayout.LayoutParams hiddenSize() {
+        float d = getResources().getDisplayMetrics().density;
+        return new FrameLayout.LayoutParams(Math.round(1600 * d), Math.round(1000 * d));
+    }
+
     private void showSession(Session s) {
         if (s.view == null) return;
         showing = s;
+        // Fit it to the TV while it's on screen; it goes back to PC size when hidden.
+        s.view.setLayoutParams(new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         webHolder.bringChildToFront(s.view);
         webHolder.setDescendantFocusability(ViewGroup.FOCUS_AFTER_DESCENDANTS);
         s.view.setFocusable(true);
@@ -821,6 +829,7 @@ public class FilerActivity extends Activity {
         Session was = showing;
         showing = null;
         if (was != null && was.view != null) {
+            was.view.setLayoutParams(hiddenSize());
             was.view.clearFocus();
             was.view.setFocusable(false);
             was.view.setFocusableInTouchMode(false);
