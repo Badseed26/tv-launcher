@@ -381,7 +381,8 @@ final class Peek {
             if (it == null) continue;
             long t = it.optLong("t");
             if (i == 0) r.newest = time(t) + " from " + cut(it.optString("from"), 30) + ": " + cut(it.optString("subj"), 50);
-            if (!ignoreSeen && newest > 0 && t <= newest) continue;
+            // the filer goes by the minute Outlook shows, so match it to the minute or every email looks newer than it is
+            if (!ignoreSeen && newest > 0 && (t / 60000) * 60000 <= newest) continue;
             if (!ignoreSeen && startAt > 0 && t < startAt - 60000) continue;
             String subj = it.optString("subj");
             if (SKIP_SUBJ.matcher(subj).find()) continue;
