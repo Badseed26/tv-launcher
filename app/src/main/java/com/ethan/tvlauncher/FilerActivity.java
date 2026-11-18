@@ -161,6 +161,7 @@ public class FilerActivity extends Activity {
         freeUpRam();
         store = GmStore.get(this);
         seedStore();
+        clearTabLocks();
         // Get the newest filer script, then open both pages with it.
         net.execute(new Runnable() {
             @Override
@@ -219,6 +220,7 @@ public class FilerActivity extends Activity {
         } catch (Exception ignored) {
         }
         writeLogLine(stamp() + "  Filer closed, both sessions shut down");
+        clearTabLocks();
         releaseDevice(getApplicationContext());
         net.shutdown();
     }
@@ -318,6 +320,8 @@ public class FilerActivity extends Activity {
         @Override
         public void onReceivedHttpError(WebView view, WebResourceRequest req, WebResourceResponse resp) {
             if (!running || view != s.view || resp == null) return;
+            String path = req.getUrl().getPath();
+            if (path != null && (path.contains("PeopleGraph") || path.contains("/people/"))) return;
             if (req.isForMainFrame() || resp.getStatusCode() >= 400 && isSite(req.getUrl().getHost())) {
                 log(s.name + " http " + resp.getStatusCode() + " " + shortUrl(req.getUrl().toString()));
             }
@@ -1158,6 +1162,32 @@ public class FilerActivity extends Activity {
                     restartSession(url.contains("aroflo") ? aroflo : outlook, "filer asked to reopen it");
                 }
             });
+        }
+    }
+
+    /**
+     * The filer script's "this tab is working" locks last 3 minutes, so after the Filer's closed and reopened the new pages
+     * would sit waiting on the old ones. The TV only ever runs one Filer, so anything left over is stale: clear it.
+     */
+    private void clearTabLocks() {
+        if (store == null) return;
+        store.delete("wfAfLock");
+        store.delete("wfMailLock");
+        try {
+            String j = store.getJson("wfJobs");
+            if (j != null) {
+                JSONArray a = new JSONArray(j);
+                boolean changed = false;
+                for (int i = 0; i < a.length(); i++) {
+                    JSONObject o = a.optJSONObject(i);
+                    if (o != null && o.has("run")) {
+                        o.remove("run");
+                        changed = true;
+                    }
+                }
+                if (changed) store.setJson("wfJobs", a.toString());
+            }
+        } catch (Exception ignored) {
         }
     }
 
