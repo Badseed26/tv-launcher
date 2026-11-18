@@ -18,10 +18,12 @@ android {
 
     signingConfigs {
         launcher {
-            storeFile file('launcher.keystore')
-            storePassword 'tvlauncher'
+            // CI can supply its own key through secrets; falls back to the key in the repo.
+            def ksPass = System.getenv("KEYSTORE_PASSWORD") ?: 'tvlauncher'
+            storeFile file(System.getenv("KEYSTORE_PATH") ?: 'launcher.keystore')
+            storePassword ksPass
             keyAlias 'launcher'
-            keyPassword 'tvlauncher'
+            keyPassword ksPass
         }
     }
 

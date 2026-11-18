@@ -92,6 +92,12 @@ public class MainActivity extends Activity implements Ui.FocusListener {
         buttons.setOrientation(LinearLayout.HORIZONTAL);
         buttons.setClipChildren(false);
         buttons.setPadding(0, Ui.dp(this, 8), 0, 0);
+        TextView updates = Ui.pill(this, "Updates", new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Updater.check(MainActivity.this, true);
+            }
+        });
         TextView apps = Ui.pill(this, "All apps", new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -104,7 +110,11 @@ public class MainActivity extends Activity implements Ui.FocusListener {
                 Ui.openSettings(MainActivity.this);
             }
         });
-        buttons.addView(apps);
+        buttons.addView(updates);
+        LinearLayout.LayoutParams alp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        alp.leftMargin = Ui.dp(this, 14);
+        buttons.addView(apps, alp);
         LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         slp.leftMargin = Ui.dp(this, 14);
@@ -199,11 +209,16 @@ public class MainActivity extends Activity implements Ui.FocusListener {
         });
         handler.removeCallbacks(tick);
         handler.post(tick);
+
+        Updater.homeVisible = true;
+        Updater.showPendingConfirm(this);
+        Updater.maybeAutoCheck(this);
     }
 
     @Override
     protected void onPause() {
         super.onPause();
+        Updater.homeVisible = false;
         handler.removeCallbacks(tick);
     }
 

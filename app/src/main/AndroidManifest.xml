@@ -7,6 +7,10 @@
     <!-- A launcher needs to see every installed app to show and open them. -->
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
 
+    <!-- Self-updates from the GitHub release. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
     <queries>
         <intent>
             <action android:name="android.intent.action.MAIN" />
@@ -51,5 +55,9 @@
             android:excludeFromRecents="true"
             android:exported="false"
             android:screenOrientation="landscape" />
+
+        <receiver
+            android:name=".UpdateReceiver"
+            android:exported="false" />
     </application>
 </manifest>
