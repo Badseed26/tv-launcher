@@ -10,6 +10,13 @@ public class UpdatedReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context c, Intent intent) {
         if (!Intent.ACTION_MY_PACKAGE_REPLACED.equals(intent.getAction())) return;
+
+        // The Home helper presses Home once it reconnects after the update.
+        Updater.setGoHome(c);
+        HomeButtonService helper = HomeButtonService.instance;
+        if (helper != null && Updater.consumeGoHome(c)) helper.goHomeSoon();
+
+        // Also try opening the home screen directly (works where Android allows it).
         Intent home = new Intent(c, MainActivity.class);
         home.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         try {

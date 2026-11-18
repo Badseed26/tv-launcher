@@ -35,6 +35,7 @@ final class Updater {
     private static volatile boolean busy;
 
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
+    private static final long GO_HOME_WINDOW_MS = 3L * 60 * 1000;
 
     private Updater() {}
 
@@ -88,6 +89,21 @@ final class Updater {
                 }
             }
         }, "launcher-updater").start();
+    }
+
+    /** Marks that the home screen should come back up after this update. */
+    static void setGoHome(Context c) {
+        c.getSharedPreferences("updater", Context.MODE_PRIVATE).edit()
+                .putLong("goHomeAt", System.currentTimeMillis()).commit();
+    }
+
+    /** True (once) if an update just happened and Home should be pressed. */
+    static boolean consumeGoHome(Context c) {
+        SharedPreferences p = c.getSharedPreferences("updater", Context.MODE_PRIVATE);
+        long at = p.getLong("goHomeAt", 0);
+        if (at == 0) return false;
+        p.edit().remove("goHomeAt").commit();
+        return System.currentTimeMillis() - at < GO_HOME_WINDOW_MS;
     }
 
     /** Shows the install confirmation if one is waiting and the home screen is up. */
@@ -145,6 +161,7 @@ final class Updater {
         if (Build.VERSION.SDK_INT >= 31) {
             params.setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED);
         }
+        setGoHome(c);
         int id = pi.createSession(params);
         PackageInstaller.Session session = pi.openSession(id);
         try {
