@@ -79,6 +79,7 @@ public class FilerActivity extends Activity {
     private final SimpleDateFormat clock = new SimpleDateFormat("HH:mm:ss", Locale.getDefault());
 
     private FrameLayout webHolder;
+    private View firstButton;
     private FrameLayout cover;
     private LinearLayout panel;
     private LinearLayout logBox;
@@ -194,7 +195,7 @@ public class FilerActivity extends Activity {
         }
         w.setWebChromeClient(new Chrome(s));
         w.setWebViewClient(new Client(s));
-        w.setFocusable(true);
+        w.setFocusable(false);
 
         s.view = w;
         s.noResponse = 0;
@@ -707,15 +708,26 @@ public class FilerActivity extends Activity {
         if (s.view == null) return;
         showing = s;
         webHolder.bringChildToFront(s.view);
+        webHolder.setDescendantFocusability(ViewGroup.FOCUS_AFTER_DESCENDANTS);
+        s.view.setFocusable(true);
+        s.view.setFocusableInTouchMode(true);
         cover.setVisibility(View.GONE);
         s.view.requestFocus();
         log(s.name + " shown on screen (Back to hide)");
     }
 
     private void hideSession() {
+        Session was = showing;
         showing = null;
+        if (was != null && was.view != null) {
+            was.view.clearFocus();
+            was.view.setFocusable(false);
+            was.view.setFocusableInTouchMode(false);
+        }
+        webHolder.setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);
         cover.setVisibility(View.VISIBLE);
-        cover.requestFocus();
+        // Put the remote back on the Filer's buttons.
+        if (firstButton != null) firstButton.requestFocus();
     }
 
     // ---------------------------------------------------------------- screen
@@ -725,6 +737,8 @@ public class FilerActivity extends Activity {
         root.setBackgroundColor(0xFF000000);
 
         webHolder = new FrameLayout(this);
+        // Hidden pages can't take the remote's focus unless one is being shown.
+        webHolder.setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);
         root.addView(webHolder, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
@@ -818,6 +832,7 @@ public class FilerActivity extends Activity {
         panel.addView(logBox, lblp);
 
         setContentView(root);
+        firstButton = first;
         first.requestFocus();
     }
 
