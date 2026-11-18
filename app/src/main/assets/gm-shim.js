@@ -1,4 +1,4 @@
-// Stand-in for Tampermonkey, so the filer script runs on the TV unchanged. The app fills in __TOKEN__, __VER__ and __SCRIPT__.
+// Stand-in for Tampermonkey, so the filer script runs on the TV unchanged. The app fills in the token, version and script.
 // Only this injected code knows the token, so nothing else on the page can use the app's bridge.
 (function () {
   if (window.top !== window.self || window.__ecShim) return;
