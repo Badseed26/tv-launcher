@@ -95,7 +95,8 @@ public class MainActivity extends Activity implements Ui.FocusListener {
         buttons.setOrientation(LinearLayout.HORIZONTAL);
         buttons.setClipChildren(false);
         buttons.setClipToPadding(false);
-        buttons.setPadding(0, Ui.dp(this, 8), 0, 0);
+        // Breathing room so the selected button can grow without hitting anything.
+        buttons.setPadding(Ui.dp(this, 12), Ui.dp(this, 8), Ui.dp(this, 12), Ui.dp(this, 12));
         TextView updates = Ui.pill(this, "Updates", new View.OnClickListener() {
             @Override
             public void onClick(View v) {

@@ -117,7 +117,13 @@ final class Ui {
         t.setFocusable(true);
         t.setClickable(true);
         t.setOnClickListener(onClick);
-        // Selected state is shown by the solid white fill, no growing, so nothing gets cut off.
+        t.setOnFocusChangeListener(new View.OnFocusChangeListener() {
+            @Override
+            public void onFocusChange(View v, boolean hasFocus) {
+                float s = hasFocus ? 1.08f : 1f;
+                v.animate().scaleX(s).scaleY(s).setDuration(140).start();
+            }
+        });
         return t;
     }
 
