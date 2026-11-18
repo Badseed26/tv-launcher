@@ -19,6 +19,7 @@ import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.webkit.ConsoleMessage;
 import android.webkit.CookieManager;
+import android.webkit.JavascriptInterface;
 import android.webkit.JsResult;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
@@ -33,6 +34,10 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import androidx.webkit.WebViewCompat;
+import androidx.webkit.WebViewFeature;
+
+import org.json.JSONArray;
 import org.json.JSONObject;
 import org.json.JSONTokener;
 
@@ -44,10 +49,14 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Random;
+import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -58,8 +67,15 @@ import java.util.regex.Pattern;
  */
 public class FilerActivity extends Activity {
 
-    private static final String OUTLOOK_URL = "https://outlook.office.com/mail/";
-    private static final String AROFLO_URL = "https://office.aroflo.com/";
+    // Opened with #ec-filer like the PC's filer tabs, so the filer script knows these are its working pages.
+    private static final String OUTLOOK_URL = "https://outlook.cloud.microsoft/mail/#ec-filer";
+    private static final String AROFLO_URL = "https://office.aroflo.com/ims/Site/Home/index.cfm#ec-filer";
+    private static final String SCRIPT_URL =
+            "https://raw.githubusercontent.com/Badseed26/ec-userscripts/main/src/ec-inbox-filer.js";
+    static final String DEV_TASK = "6j3H69rH7Cj9858X";
+    private static final String[] FILER_ORIGINS = {
+            "https://outlook.cloud.microsoft", "https://outlook.office.com",
+            "https://outlook.office365.com", "https://office.aroflo.com"};
     private static final long TICK_MS = 8000;
     private static final long FILL_WINDOW_MS = 30L * 60 * 1000;
     private static final int MAX_PASSWORD_FILLS = 2;
@@ -70,6 +86,14 @@ public class FilerActivity extends Activity {
     private static final int DIM = 0xFF8C92A8;
 
     private static String probeJs;
+    private static String shimJs;
+
+    private final String token = UUID.randomUUID().toString().replace("-", "");
+    private final ExecutorService net = Executors.newFixedThreadPool(3);
+    private GmStore store;
+    private String injection;   // shim + filer script, or null if it couldn't be loaded
+    private String filerVersion = "";
+    private TextView filerTitle;
 
     /** The open Filer screen, so a code pushed from AirHQ can reach it. */
     static volatile FilerActivity instance;
@@ -101,6 +125,7 @@ public class FilerActivity extends Activity {
         String state = "Starting";
         long lastAlive;
         int noResponse;
+        boolean injectLate;
         boolean gaveUp;
         long holdFillUntil;
         final List<Long> passwordFills = new ArrayList<>();
@@ -120,6 +145,7 @@ public class FilerActivity extends Activity {
         super.onCreate(savedInstanceState);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         if (probeJs == null) probeJs = readAsset("probe.js");
+        if (shimJs == null) shimJs = readAsset("gm-shim.js");
 
         outlook = new Session("Outlook", OUTLOOK_URL);
         aroflo = new Session("AroFlo", AROFLO_URL);
@@ -133,8 +159,33 @@ public class FilerActivity extends Activity {
         }
 
         freeUpRam();
-        startSession(outlook);
-        startSession(aroflo);
+        store = GmStore.get(this);
+        seedStore();
+        // Get the newest filer script, then open both pages with it.
+        net.execute(new Runnable() {
+            @Override
+            public void run() {
+                final String src = loadScript();
+                handler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (!running) return;
+                        if (src != null) {
+                            filerVersion = versionOf(src);
+                            injection = shimJs.replace("__TOKEN__", token).replace("__VER__", filerVersion)
+                                    .replace("__SCRIPT__", src);
+                            log("Filer script " + filerVersion + " loaded");
+                        } else {
+                            log("Couldn't get the filer script, running sign-in only");
+                        }
+                        if (filerTitle != null) filerTitle.setText("Filer  \u00B7  build " + Updater.currentVersion(FilerActivity.this)
+                                + (filerVersion.isEmpty() ? "" : "  \u00B7  script " + filerVersion));
+                        startSession(outlook);
+                        startSession(aroflo);
+                    }
+                });
+            }
+        });
         handler.postDelayed(tick, 3000);
         handler.postDelayed(drift, 30000);
     }
@@ -168,6 +219,8 @@ public class FilerActivity extends Activity {
         } catch (Exception ignored) {
         }
         writeLogLine(stamp() + "  Filer closed, both sessions shut down");
+        releaseDevice(getApplicationContext());
+        net.shutdown();
     }
 
     // ---------------------------------------------------------------- sessions
@@ -195,6 +248,15 @@ public class FilerActivity extends Activity {
             w.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false);
         }
         w.setWebChromeClient(new Chrome(s));
+        w.addJavascriptInterface(new GmBridge(s), "ecGmBridge");
+        if (injection != null && WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+            HashSet<String> origins = new HashSet<>();
+            for (String o : FILER_ORIGINS) origins.add(o);
+            WebViewCompat.addDocumentStartJavaScript(w, injection, origins);
+            s.injectLate = false;
+        } else {
+            s.injectLate = injection != null;
+        }
         w.setWebViewClient(new Client(s));
         w.setFocusable(false);
 
@@ -242,6 +304,15 @@ public class FilerActivity extends Activity {
         @Override
         public void onPageStarted(WebView view, String url, Bitmap favicon) {
             if (running && view == s.view) log(s.name + " > " + shortUrl(url));
+            // Older WebView without document-start scripts: put the filer in as early as we can.
+            if (s.injectLate && injection != null && url != null) {
+                for (String o : FILER_ORIGINS) {
+                    if (url.startsWith(o)) {
+                        view.evaluateJavascript(injection, null);
+                        break;
+                    }
+                }
+            }
         }
 
         @Override
@@ -413,6 +484,7 @@ public class FilerActivity extends Activity {
             probe(aroflo);
             updateRam();
             refreshAges();
+            renderLog();
             handler.postDelayed(this, TICK_MS);
         }
     };
@@ -629,9 +701,28 @@ public class FilerActivity extends Activity {
     }
 
     private String statusText(Session s) {
-        if (!"Alive".equals(s.state) || s.lastAlive == 0) return s.state;
-        long secs = (System.currentTimeMillis() - s.lastAlive) / 1000;
-        return "Alive, checked " + secs + "s ago";
+        String base;
+        if (!"Alive".equals(s.state) || s.lastAlive == 0) {
+            base = s.state;
+        } else {
+            long secs = (System.currentTimeMillis() - s.lastAlive) / 1000;
+            base = "Alive, checked " + secs + "s ago";
+        }
+        String chip = filerChip(s == outlook ? "mail" : "af");
+        return chip.isEmpty() ? base : base + "   |   filer: " + chip;
+    }
+
+    /** What the filer script's own status chip says for that page. */
+    private String filerChip(String k) {
+        if (store == null) return "";
+        try {
+            String j = store.getJson("wfState_" + k);
+            if (j == null) return "";
+            JSONObject o = new JSONObject(j);
+            return o.optString("msg", "");
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     private void refreshAges() {
@@ -798,6 +889,7 @@ public class FilerActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
         TextView title = Ui.text(this, "Filer  \u00B7  build " + Updater.currentVersion(this), 26, Ui.TEXT_PRIMARY, Ui.LIGHT);
+        filerTitle = title;
         panel.addView(title);
         TextView sub = Ui.text(this, "Test build. Close this screen and everything shuts down.", 13, DIM, Ui.REGULAR);
         LinearLayout.LayoutParams sublp = wrap();
@@ -864,8 +956,10 @@ public class FilerActivity extends Activity {
         panel.addView(logTitle, ltlp);
 
         logBox = new LinearLayout(this);
+        logBox.setMinimumWidth(Ui.dp(this, 700));
         logBox.setOrientation(LinearLayout.VERTICAL);
-        LinearLayout.LayoutParams lblp = wrap();
+        LinearLayout.LayoutParams lblp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         lblp.topMargin = Ui.dp(this, 8);
         panel.addView(logBox, lblp);
 
@@ -923,16 +1017,56 @@ public class FilerActivity extends Activity {
         lines.addFirst(line);
         while (lines.size() > 200) lines.removeLast();
         writeLogLine(line);
+        renderLog();
+    }
+
+    /** The filer's own log (same lines the dashboard shows), then the TV's last few lines. */
+    private void renderLog() {
         if (logBox == null) return;
         logBox.removeAllViews();
+        List<String> filer = filerLog(10);
         int n = 0;
-        for (String l : lines) {
-            TextView t = Ui.text(this, l, 13, n == 0 ? 0xFFC9CDDA : DIM, Ui.REGULAR);
-            LinearLayout.LayoutParams lp = wrap();
-            lp.topMargin = Ui.dp(this, 4);
-            logBox.addView(t, lp);
-            if (++n >= 12) break;
+        for (String l : filer) {
+            addLogLine(l, n++ == 0 ? 0xFFC9CDDA : DIM);
         }
+        if (!filer.isEmpty()) {
+            TextView tvHead = Ui.text(this, "TV", 12, DIM, Ui.MEDIUM);
+            tvHead.setLetterSpacing(0.15f);
+            LinearLayout.LayoutParams hl = wrap();
+            hl.topMargin = Ui.dp(this, 12);
+            logBox.addView(tvHead, hl);
+        }
+        int m = 0;
+        for (String l : lines) {
+            addLogLine(l, filer.isEmpty() && m == 0 ? 0xFFC9CDDA : DIM);
+            if (++m >= (filer.isEmpty() ? 12 : 4)) break;
+        }
+    }
+
+    private void addLogLine(String text, int colour) {
+        TextView t = Ui.text(this, text, 13, colour, Ui.REGULAR);
+        t.setSingleLine(true);
+        t.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.topMargin = Ui.dp(this, 4);
+        logBox.addView(t, lp);
+    }
+
+    /** Newest first, date dropped (the filer writes "18/11/2026 8:08:36 pm [mail] ..."). */
+    List<String> filerLog(int max) {
+        List<String> out = new ArrayList<>();
+        if (store == null) return out;
+        try {
+            String j = store.getJson("wfLog");
+            if (j == null) return out;
+            JSONArray a = new JSONArray(j);
+            for (int i = a.length() - 1; i >= 0 && out.size() < max; i--) {
+                out.add(a.optString(i).replaceFirst("^\\d{1,2}/\\d{1,2}/\\d{4}\\s+", ""));
+            }
+        } catch (Exception ignored) {
+        }
+        return out;
     }
 
     private String stamp() {
@@ -953,6 +1087,164 @@ public class FilerActivity extends Activity {
             w.close();
         } catch (Exception ignored) {
         }
+    }
+
+    // ---------------------------------------------------------------- filer script
+
+    /** Tampermonkey's GM_* calls, for one page. Every call needs the token only the injected script knows. */
+    private final class GmBridge {
+        private final Session s;
+
+        GmBridge(Session s) {
+            this.s = s;
+        }
+
+        private boolean ok(String t) {
+            return running && token.equals(t);
+        }
+
+        @JavascriptInterface
+        public String get(String t, String key) {
+            return ok(t) ? store.getJson(key) : null;
+        }
+
+        @JavascriptInterface
+        public void set(String t, String key, String json) {
+            if (ok(t)) store.setJson(key, json);
+        }
+
+        @JavascriptInterface
+        public void del(String t, String key) {
+            if (ok(t)) store.delete(key);
+        }
+
+        @JavascriptInterface
+        public String list(String t) {
+            return ok(t) ? store.listJson() : "[]";
+        }
+
+        @JavascriptInterface
+        public void xhr(String t, final String id, final String req) {
+            if (!ok(t)) return;
+            try {
+                net.execute(new Runnable() {
+                    @Override
+                    public void run() {
+                        final String res = Http.run(req);
+                        handler.post(new Runnable() {
+                            @Override
+                            public void run() {
+                                WebView w = s.view;
+                                if (running && w != null) {
+                                    w.evaluateJavascript("window.__ecGmDone&&window.__ecGmDone("
+                                            + JSONObject.quote(id) + "," + res + ")", null);
+                                }
+                            }
+                        });
+                    }
+                });
+            } catch (Exception ignored) {
+            }
+        }
+
+        /** The filer reopens a quiet tab with GM_openInTab: here that restarts the matching page. */
+        @JavascriptInterface
+        public void openTab(String t, final String url) {
+            if (!ok(t)) return;
+            handler.post(new Runnable() {
+                @Override
+                public void run() {
+                    if (!running) return;
+                    restartSession(url.contains("aroflo") ? aroflo : outlook, "filer asked to reopen it");
+                }
+            });
+        }
+    }
+
+    /** Puts the Claude key and Todoist token where the filer script looks for them, and marks this device as the TV. */
+    private void seedStore() {
+        String key = Secrets.get(this, Secrets.CLAUDE_KEY);
+        String td = Secrets.get(this, Secrets.TODOIST_TOKEN);
+        if (key != null) store.setJson("ecAnthropicKey", JSONObject.quote(key));
+        if (td != null) store.setJson("todoistToken", JSONObject.quote(td));
+        store.setJson("ecDeviceName", JSONObject.quote("TV"));
+    }
+
+    /** Newest script from GitHub (kept on the TV), or the last good copy if GitHub can't be reached. */
+    private String loadScript() {
+        File cache = new File(getFilesDir(), "ec-inbox-filer.js");
+        try {
+            String src = Http.get(SCRIPT_URL + "?t=" + System.currentTimeMillis(), 20000);
+            if (src.contains("==UserScript==")) {
+                FileWriter w = new FileWriter(cache, false);
+                w.write(src);
+                w.close();
+                return src;
+            }
+        } catch (Exception ignored) {
+        }
+        try {
+            if (cache.exists()) {
+                BufferedReader r = new BufferedReader(new java.io.FileReader(cache));
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = r.readLine()) != null) sb.append(line).append('\n');
+                r.close();
+                return sb.toString();
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    private static String versionOf(String src) {
+        Matcher m = Pattern.compile("@version\\s+(\\S+)").matcher(src);
+        return m.find() ? m.group(1) : "?";
+    }
+
+    /** Frees the "* Filer device" task straight away if the TV had it, so the PC can take over without waiting. */
+    static void releaseDevice(final Context c) {
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    String td = Secrets.get(c, Secrets.TODOIST_TOKEN);
+                    String mine = GmStore.get(c).getJson("ecDeviceId");
+                    if (td == null || mine == null) return;
+                    mine = new JSONTokener(mine).nextValue().toString();
+                    JSONObject t = new JSONObject(Http.todoist(td, "GET", "tasks/" + DEV_TASK, null));
+                    String d = t.optString("description", "");
+                    if (!d.contains("id: " + mine + "\n")) return;
+                    JSONObject b = new JSONObject();
+                    b.put("content", "* Filer device");
+                    b.put("description", "Free. The TV closed its Filer at " + new SimpleDateFormat("h:mm a", Locale.getDefault())
+                            .format(new Date()) + ". Don't edit.");
+                    Http.todoist(td, "POST", "tasks/" + DEV_TASK, b);
+                } catch (Exception ignored) {
+                }
+            }
+        }).start();
+    }
+
+    // ---------------------------------------------------------------- remote (TV remote task)
+
+    String remoteStatus() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Filer open, build ").append(Updater.currentVersion(this));
+        if (!filerVersion.isEmpty()) sb.append(", script ").append(filerVersion);
+        sb.append("\nOutlook: ").append(statusText(outlook));
+        sb.append("\nAroFlo: ").append(statusText(aroflo));
+        sb.append("\n").append(ramText.getText());
+        return sb.toString();
+    }
+
+    void remoteReload() {
+        restartSession(outlook, "reload from the TV remote task");
+        restartSession(aroflo, "reload from the TV remote task");
+    }
+
+    void remoteLog(String msg) {
+        log(msg);
     }
 
     // ---------------------------------------------------------------- helpers

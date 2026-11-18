@@ -48,3 +48,8 @@ android {
         abortOnError false
     }
 }
+
+dependencies {
+    // Runs the filer script before the page's own code, like Tampermonkey's document-start.
+    implementation 'androidx.webkit:webkit:1.12.1'
+}
