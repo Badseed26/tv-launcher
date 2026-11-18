@@ -1,0 +1,47 @@
+plugins {
+    id 'com.android.application'
+}
+
+def runNumber = Integer.parseInt(System.getenv("GITHUB_RUN_NUMBER") ?: "1")
+
+android {
+    namespace 'com.ethan.tvlauncher'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.ethan.tvlauncher"
+        minSdk 21
+        targetSdk 28
+        versionCode runNumber
+        versionName "1.0." + runNumber
+    }
+
+    signingConfigs {
+        launcher {
+            storeFile file('launcher.keystore')
+            storePassword 'tvlauncher'
+            keyAlias 'launcher'
+            keyPassword 'tvlauncher'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.launcher
+        }
+        debug {
+            signingConfig signingConfigs.launcher
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    lint {
+        checkReleaseBuilds false
+        abortOnError false
+    }
+}
