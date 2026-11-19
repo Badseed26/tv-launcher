@@ -27,6 +27,7 @@
     if (JOB.kind == 'cal') {
       for (var k = 0; k < 80 && !(window.jQuery && jQuery('.fc').length && jQuery('.fc').first().fullCalendar('clientEvents').length); k++) await sleep(250);
       if (!(window.jQuery && jQuery('.fc').length)) return done({ err: 'the AroFlo calendar never loaded' });
+      if (!jQuery('.fc').first().fullCalendar('clientEvents').length) return done({ err: 'the AroFlo calendar showed no bookings after 20 sec (slow or signed out?), page: ' + document.title.slice(0, 60) });
       var $c = jQuery('.fc').first(), fc = function () { return $c.fullCalendar('clientEvents'); }, idx = new Map();
       var grab = function () {
         fc().filter(function (e) { return e.type == 'task'; }).forEach(function (e) {
@@ -71,6 +72,7 @@
           var term = JOB.terms[q], m;
           try {
             if ((m = term.match(/^notes?\s+(\d{4,5})$/i))) { queue.push(m[1]); out.push('@notes ' + m[1]); continue; }
+            if (/^diag$/i.test(term)) { out.push('diag: page ' + innerWidth + 'x' + innerHeight + ' css px, dpr ' + devicePixelRatio + ', screen ' + screen.width + 'x' + screen.height); continue; }
             var field = 'Location', s = term;
             if ((m = term.match(/^(jn|job)\s*(\d{4,5})$/i)) || (m = term.match(/^()(\d{4,5})$/))) { field = 'JobNo'; s = m[2]; }
             else if ((m = term.match(/^(po|claim|order)\s+(.+)$/i))) { field = 'CustOn'; s = m[2]; }
