@@ -40,25 +40,27 @@
       var from = new Date(); from.setHours(0, 0, 0, 0);
       var back = JOB.back || 0; from = new Date(from.getTime() - back * 864e5);
       var weeks = JOB.weeks || 5;
-      // 20/11: wait for each week's view to be on screen and its bookings to stop changing (a quick read missed a week)
-      var viewHas = function (d) { try { var v = $c.fullCalendar('getView'); return new Date(+v.start) <= d && d < new Date(+v.end); } catch (e) { return true; } };
+      // 20/11: after each jump, wait for the bookings to stop changing (a quick read missed a week). Lines so far go in
+      // window.__runPartial, so a timeout still hands back what it got.
+      var DN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      var tm = function (x) { if (!x) return '?'; var h = x.getHours(), m = x.getMinutes(); return (h % 12 || 12) + ':' + (m < 10 ? '0' : '') + m + (h < 12 ? 'am' : 'pm'); };
+      var linesNow = function () {
+        return Array.from(idx.values()).filter(function (v) { return v.start >= from; }).sort(function (a, b) { return a.start - b.start; }).map(function (v) {
+          var s = v.start;
+          return DN[s.getDay()] + ' ' + s.getDate() + '/' + (s.getMonth() + 1) + ' ' + tm(s) + '-' + tm(v.end) + ' ' + v.staff + ' | JN ' + v.h + ' | ' + v.t + (v.cancel ? ' | CANCELLED' : '');
+        });
+      };
       for (var w = 0; w < weeks; w++) {
         var d = new Date(from.getTime() + w * 7 * 864e5);
         $c.fullCalendar('gotoDate', d);
         var last = -1, same = 0;
-        for (var n = 0; n < 30 && same < 3; n++) { await sleep(400); var c = fc().length; if (viewHas(d) && c == last && c > 0) same++; else same = 0; last = c; }
+        for (var n = 0; n < 20 && same < 3; n++) { await sleep(400); var c = fc().length; if (n >= 2 && c == last) same++; else same = 0; last = c; }
         grab();
+        window.__runPartial = { ok: true, partial: true, visits: idx.size, from: from.getDate() + '/' + (from.getMonth() + 1), weeks: w + 1, lines: linesNow() };
       }
-      var DN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-      var tm = function (x) { if (!x) return '?'; var h = x.getHours(), m = x.getMinutes(); return (h % 12 || 12) + ':' + (m < 10 ? '0' : '') + m + (h < 12 ? 'am' : 'pm'); };
-      var list = Array.from(idx.values()).filter(function (v) { return v.start >= from; }).sort(function (a, b) { return a.start - b.start; });
-      var lines = list.map(function (v) {
-        var s = v.start;
-        return DN[s.getDay()] + ' ' + s.getDate() + '/' + (s.getMonth() + 1) + ' ' + tm(s) + '-' + tm(v.end) + ' ' + v.staff + ' | JN ' + v.h + ' | ' + v.t + (v.cancel ? ' | CANCELLED' : '');
-      });
+      var lines = linesNow();
       return done({ ok: true, visits: lines.length, from: from.getDate() + '/' + (from.getMonth() + 1), weeks: weeks, lines: lines });
     }
-
     if (JOB.kind == 'lookup') {
       var out = [];
       for (var q = 0; q < JOB.terms.length && q < 25; q++) {

@@ -63,7 +63,7 @@ public class RunnerActivity extends Activity {
     private static final String[] OUTLOOK_ORIGINS = {
             "https://outlook.cloud.microsoft", "https://outlook.office.com", "https://outlook.office365.com"};
     private static final long PULL_MAX_MS = 10 * 60000;
-    private static final long AF_MAX_MS = 2 * 60000;
+    private static final long AF_MAX_MS = 3 * 60000;
     private static final int DIM = 0xFF8C92A8;
     private static final int GOOD = 0xFF4ADE80;
     private static final int WARN = 0xFFFBBF24;
@@ -499,7 +499,29 @@ public class RunnerActivity extends Activity {
         @Override
         public void run() {
             if (!alive || job == null) return;
-            afDone("{\"err\":\"AroFlo didn't answer in 2 min\"}");
+            final String stuck = "{\"err\":\"AroFlo didn't answer in 3 min (" + (web == null ? "no page" : String.valueOf(web.getUrl()).replaceAll("[?#].*$", "")) + ")\"}";
+            if (web == null) {
+                afDone(stuck);
+                return;
+            }
+            // keep whatever weeks of the calendar it got
+            web.evaluateJavascript("JSON.stringify(window.__runPartial||null)", new android.webkit.ValueCallback<String>() {
+                @Override
+                public void onReceiveValue(String v) {
+                    if (!alive || job == null) return;
+                    try {
+                        String inner = new JSONArray("[" + v + "]").optString(0, "null");
+                        if (inner != null && inner.startsWith("{")) {
+                            JSONObject o = new JSONObject(inner);
+                            o.put("weeks", o.optInt("weeks") + " (stopped early, AroFlo was slow)");
+                            afDone(o.toString());
+                            return;
+                        }
+                    } catch (Exception ignored) {
+                    }
+                    afDone(stuck);
+                }
+            });
         }
     };
 
@@ -553,7 +575,7 @@ public class RunnerActivity extends Activity {
         } else {
             JSONArray lines = r.optJSONArray("lines");
             int n = lines == null ? 0 : lines.length();
-            calLine = "Calendar: " + n + " visits over " + r.optInt("weeks") + " weeks from " + r.optString("from");
+            calLine = "Calendar: " + n + " visits over " + r.optString("weeks") + " weeks from " + r.optString("from");
             sb.append(calLine).append(". One line a visit: day, time, staff | JN / status / substatus / note | client, PO, address\n");
             for (int i = 0; i < n; i++) sb.append(lines.optString(i)).append('\n');
             say(calLine, GOOD);
