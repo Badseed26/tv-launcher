@@ -82,7 +82,7 @@ function shot(){
   var s=S.which;
   fetch('/api/shot?s='+s+'&t='+Date.now(),{cache:'no-store'}).then(function(r){
     if(r.status==401){location.reload();throw 0;}
-    if(!r.ok){showMsg(S.st.filer===false?'The Filer\'s closed. Press Open Filer below.':'No picture yet, trying again');return null;}
+    if(!r.ok){return r.text().then(function(t){showMsg(S.st.filer===false?'The Filer\'s closed. Press Open Filer below.':(t||'No picture yet')+', trying again');return null;});}
     return r.blob();
   }).then(function(b){
     if(!b||s!==S.which)return;

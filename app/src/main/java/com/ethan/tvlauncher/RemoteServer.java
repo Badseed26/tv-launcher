@@ -40,7 +40,7 @@ final class RemoteServer {
     private static RemoteServer running;
 
     private final Context c;
-    private final ExecutorService pool = Executors.newFixedThreadPool(4);
+    private final ExecutorService pool = Executors.newFixedThreadPool(8);
     private final Handler main = new Handler(Looper.getMainLooper());
     private final SecureRandom rnd = new SecureRandom();
     private long failStart;
@@ -319,9 +319,11 @@ final class RemoteServer {
                 }, 250);
             }
         });
-        done.await(8, TimeUnit.SECONDS);
+        boolean inTime = done.await(8, TimeUnit.SECONDS);
         byte[] b = img.get();
-        if (b == null) send(out, 409, "text/plain", "No picture (Filer closed?)".getBytes(StandardCharsets.UTF_8), null);
+        if (b == null) send(out, 409, "text/plain", (FilerActivity.instance == null ? "The Filer's closed"
+                : inTime ? "The TV couldn't take a picture of the page" : "The TV took too long taking the picture")
+                .getBytes(StandardCharsets.UTF_8), null);
         else send(out, 200, "image/jpeg", b, null, "Cache-Control: no-store");
     }
 

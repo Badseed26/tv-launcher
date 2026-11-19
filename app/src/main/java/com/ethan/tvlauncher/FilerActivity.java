@@ -1501,28 +1501,76 @@ public class FilerActivity extends Activity {
     void webShot(final Shot cb) {
         final View root = getWindow().getDecorView();
         final int w = root.getWidth(), h = root.getHeight();
-        if (Build.VERSION.SDK_INT < 26 || w == 0 || h == 0) {
+        if (w == 0 || h == 0) {
             cb.done(null);
             return;
         }
-        final Bitmap full = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
-        android.view.PixelCopy.request(getWindow(), full, new android.view.PixelCopy.OnPixelCopyFinishedListener() {
-            @Override
-            public void onPixelCopyFinished(int result) {
-                if (result != android.view.PixelCopy.SUCCESS) {
-                    full.recycle();
-                    cb.done(null);
-                    return;
+        if (Build.VERSION.SDK_INT < 26) {
+            cb.done(drawShot());
+            return;
+        }
+        final Bitmap full;
+        try {
+            full = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+        } catch (Throwable e) {
+            cb.done(null);
+            return;
+        }
+        try {
+            android.view.PixelCopy.request(getWindow(), full, new android.view.PixelCopy.OnPixelCopyFinishedListener() {
+                @Override
+                public void onPixelCopyFinished(int result) {
+                    if (result == android.view.PixelCopy.SUCCESS) {
+                        cb.done(jpeg(full, w));
+                    } else {
+                        full.recycle();
+                        if (!shotFailLogged) {
+                            shotFailLogged = true;
+                            log("Phone remote: screen copy said " + result + ", drawing the page instead");
+                        }
+                        cb.done(drawShot());
+                    }
                 }
-                int tw = Math.min(1000, w), th = Math.round(h * (tw / (float) w));
-                Bitmap small = Bitmap.createScaledBitmap(full, tw, th, true);
-                full.recycle();
-                java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
-                small.compress(Bitmap.CompressFormat.JPEG, 70, out);
-                small.recycle();
-                cb.done(out.toByteArray());
-            }
-        }, handler);
+            }, handler);
+        } catch (Throwable e) {
+            full.recycle();
+            log("Phone remote: screen copy failed (" + e.getMessage() + "), drawing the page instead");
+            cb.done(drawShot());
+        }
+    }
+
+    private boolean shotFailLogged;
+
+    /** Second way: draw the showing page itself into a picture. */
+    private byte[] drawShot() {
+        Session s = showing;
+        if (s == null || s.view == null || s.view.getWidth() == 0) return null;
+        try {
+            int vw = s.view.getWidth(), vh = s.view.getHeight();
+            float k = Math.min(1f, 1000f / vw);
+            Bitmap b = Bitmap.createBitmap(Math.round(vw * k), Math.round(vh * k), Bitmap.Config.ARGB_8888);
+            android.graphics.Canvas cv = new android.graphics.Canvas(b);
+            cv.scale(k, k);
+            cv.translate(-s.view.getScrollX(), -s.view.getScrollY());
+            s.view.draw(cv);
+            return jpeg(b, b.getWidth());
+        } catch (Throwable e) {
+            log("Phone remote: couldn't draw the page (" + e.getMessage() + ")");
+            return null;
+        }
+    }
+
+    private static byte[] jpeg(Bitmap full, int w) {
+        Bitmap small = full;
+        if (w > 1000) {
+            int th = Math.round(full.getHeight() * (1000f / w));
+            small = Bitmap.createScaledBitmap(full, 1000, th, true);
+            full.recycle();
+        }
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        small.compress(Bitmap.CompressFormat.JPEG, 70, out);
+        small.recycle();
+        return out.toByteArray();
     }
 
     /** A real tap at fx, fy (0 to 1 across the screen) on the page that's showing. */
