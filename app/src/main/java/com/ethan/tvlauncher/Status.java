@@ -38,6 +38,9 @@ final class Status {
                 sb.append("mail check: ").append(ListenService.peekOn(c) ? (ListenService.peekOpens(c) ? "on" : "log only") : "off").append('\n');
                 String last = r != null ? Peek.time(now) + " " + r.summary() : Peek.last;
                 if (!last.isEmpty()) sb.append("last check: ").append(last.length() > 300 ? last.substring(0, 300) + "..." : last).append('\n');
+                // newest inbox pull bundle, so the dashboard can pick it up without reading every comment (20/11)
+                String bundle = c.getSharedPreferences("runner", Context.MODE_PRIVATE).getString("bundle", "");
+                if (!bundle.isEmpty()) sb.append("bundle: ").append(bundle).append('\n');
                 final String desc = sb.toString();
                 new Thread(new Runnable() {
                     @Override

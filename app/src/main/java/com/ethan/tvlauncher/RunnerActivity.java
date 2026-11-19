@@ -655,7 +655,17 @@ public class RunnerActivity extends Activity {
                     b.put("content", "TV: " + line + (att != null ? " Bundle attached (" + name + ", "
                             + (file.length() / 1024) + " KB)." : ""));
                     if (att != null) b.put("attachment", att);
-                    Http.todoist(token, "POST", "comments", b);
+                    String made = Http.todoist(token, "POST", "comments", b);
+                    // the heartbeat names the newest bundle: "<comment id> <day> <time>", the dashboard picks it up from there
+                    if (att != null && name != null && name.startsWith("ec-inbox-")) {
+                        String id = new JSONObject(made).optString("id");
+                        String day = name.replace("ec-inbox-", "").replace(".txt", "");
+                        if (!id.isEmpty()) {
+                            getSharedPreferences("runner", MODE_PRIVATE).edit()
+                                    .putString("bundle", id + " " + day + " " + System.currentTimeMillis()).apply();
+                            Status.write(RunnerActivity.this, null);
+                        }
+                    }
                     if (file != null && att == null) {
                         int parts = (file.length() + 13499) / 13500;
                         for (int i = 0; i < parts; i++) {
