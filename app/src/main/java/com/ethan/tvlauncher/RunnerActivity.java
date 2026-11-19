@@ -169,7 +169,8 @@ public class RunnerActivity extends Activity {
     private final String token = UUID.randomUUID().toString().replace("-", "");
     private final SimpleDateFormat clock = new SimpleDateFormat("h:mm:ss a", Locale.US);
     private String shimJs, afJs;
-    private FrameLayout webHolder;
+    private FrameLayout webHolder, cover;
+    private TextView strip;
     private WebView web;
     private LinearLayout logBox, dayRow;
     private TextView title, now;
@@ -239,7 +240,7 @@ public class RunnerActivity extends Activity {
         webHolder.setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);
         root.addView(webHolder, new FrameLayout.LayoutParams(-1, -1));
 
-        FrameLayout cover = new FrameLayout(this);
+        cover = new FrameLayout(this);
         cover.addView(new Ui.BackgroundView(this), new FrameLayout.LayoutParams(-1, -1));
         cover.setClickable(true);
         root.addView(cover, new FrameLayout.LayoutParams(-1, -1));
@@ -324,6 +325,14 @@ public class RunnerActivity extends Activity {
         llp.topMargin = Ui.dp(this, 14);
         panel.addView(logBox, llp);
 
+        // 20/11 (Ethan): the page runs full screen while a job's going, with this strip on top, then the TV goes back to
+        // how it was. Behind the Runner screen Outlook's mail list wouldn't scroll back past the newest 24 emails.
+        strip = Ui.text(this, "", 15, Ui.TEXT_PRIMARY, Ui.MEDIUM);
+        strip.setBackgroundColor(0xE60B0F17);
+        strip.setPadding(Ui.dp(this, 20), Ui.dp(this, 8), Ui.dp(this, 20), Ui.dp(this, 8));
+        strip.setVisibility(View.GONE);
+        root.addView(strip, new FrameLayout.LayoutParams(-1, ViewGroup.LayoutParams.WRAP_CONTENT));
+
         setContentView(root);
         pickedDay = days().get(0);
         markPicked();
@@ -356,6 +365,7 @@ public class RunnerActivity extends Activity {
     private void setNow(String s) {
         state = s;
         if (now != null) now.setText(s);
+        if (strip != null) strip.setText("Runner  \u00B7  " + s + "   (the TV goes back to how it was when it's done)");
     }
 
     // ---------------------------------------------------------------- jobs
@@ -758,18 +768,30 @@ public class RunnerActivity extends Activity {
         });
         w.setFocusable(false);
         web = w;
-        // PC size behind the cover. 20/11: the TV doubles everything (pixel ratio 2), so 1600 x 1000 pixels was only
-        // 800 x 500 to Outlook: folder list folded away and a missed day couldn't scroll back (Wed 18/11 came back empty).
-        // Sized by the screen density now, so the page really is 1600 x 1000.
+        // PC size: the TV doubles everything (pixel ratio 2), so it's sized by the density to really be 1600 x 1000 to
+        // the page. Then shrunk to fit the screen and shown full screen while the job runs (20/11).
         float dens = getResources().getDisplayMetrics().density;
-        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(Math.round(1600 * dens), Math.round(1000 * dens));
+        int pw = Math.round(1600 * dens), ph = Math.round(1000 * dens);
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(pw, ph);
+        int sw = getResources().getDisplayMetrics().widthPixels, sh = getResources().getDisplayMetrics().heightPixels;
+        float k = Math.min(sw / (float) pw, sh / (float) ph);
+        w.setPivotX(0);
+        w.setPivotY(0);
+        w.setScaleX(k);
+        w.setScaleY(k);
+        w.setTranslationX((sw - pw * k) / 2f);
+        w.setTranslationY((sh - ph * k) / 2f);
         webHolder.addView(w, 0, lp);
+        cover.setVisibility(View.GONE);
+        strip.setVisibility(View.VISIBLE);
         w.loadUrl(url);
     }
 
     private void stopPage() {
         WebView w = web;
         web = null;
+        if (cover != null) cover.setVisibility(View.VISIBLE);
+        if (strip != null) strip.setVisibility(View.GONE);
         if (w == null) return;
         try {
             webHolder.removeView(w);
@@ -851,7 +873,7 @@ public class RunnerActivity extends Activity {
     private String loadScript() {
         File cache = new File(getFilesDir(), "ec-inbox-pull.js");
         try {
-            String src = Http.get(PULL_URL + "?t=" + System.currentTimeMillis(), 20000);
+            String src = fresh("ec-userscripts", "src/ec-inbox-pull.js", PULL_URL);
             if (src.contains("==UserScript==")) {
                 FileWriter w = new FileWriter(cache, false);
                 w.write(src);
@@ -867,11 +889,33 @@ public class RunnerActivity extends Activity {
         return null;
     }
 
+    /**
+     * Newest copy of a script straight from GitHub's API (not cached, so a push is live on the next run; the raw file
+     * server can hand out the old copy for 5 min). Falls back to the raw file.
+     */
+    private static String fresh(String repo, String path, String rawUrl) throws Exception {
+        try {
+            JSONObject r = new JSONObject();
+            r.put("method", "GET");
+            r.put("url", "https://api.github.com/repos/Badseed26/" + repo + "/contents/" + path + "?ref=main");
+            JSONObject h = new JSONObject();
+            h.put("Accept", "application/vnd.github.raw");
+            h.put("User-Agent", "ec-tv-runner");
+            r.put("headers", h);
+            r.put("timeout", 20000);
+            JSONObject res = new JSONObject(Http.run(r.toString()));
+            if (!res.optBoolean("error") && res.optInt("status") == 200)
+                return new String(Base64.decode(res.optString("b64", ""), Base64.DEFAULT), StandardCharsets.UTF_8);
+        } catch (Exception ignored) {
+        }
+        return Http.get(rawUrl + "?t=" + System.currentTimeMillis(), 20000);
+    }
+
     /** Newest AroFlo side from GitHub (kept on the TV), else the last good copy, else the one built in. */
     private void loadAf() {
         File cache = new File(getFilesDir(), "runner-af.js");
         try {
-            String src = Http.get(AF_URL + "?t=" + System.currentTimeMillis(), 15000);
+            String src = fresh("tv-launcher", "app/src/main/assets/runner-af.js", AF_URL);
             if (src.contains("__JOB__") && src.contains("ecRun.done")) {
                 FileWriter w = new FileWriter(cache, false);
                 w.write(src);

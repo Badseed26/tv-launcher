@@ -53,7 +53,10 @@ This repo is **public**: never put logins, PINs, tokens, IP addresses or the bus
   check) close themselves after about a minute of nothing to do and put the TV back to sleep if it was off.
 - `RunnerActivity` (build 37 on): runs Ethan's other scripts on the TV, one job at a time, then goes back to how the TV
   was (Filer reopened, asleep again, or home). Never takes the TV off HDMI or another app.
-  - The TV's pixel ratio is 2, so the Runner sizes its page at 1600x1000 times the density (true PC width, 20/11).
+  - The TV's pixel ratio is 2, so the Runner sizes its page at 1600x1000 times the density (true PC width, 20/11),
+    shrinks it to fit and shows it full screen with a status strip while a job runs. Ethan's OK with any new TV job
+    running full screen as long as the TV goes back to exactly how it was (Filer, home or asleep) after.
+  - Scripts come from GitHub's API (not cached), raw file as fallback, so a push is live on the next run.
     The Filer's pages are still 1600x1000 pixels, which Outlook sees as 800x500 (folder list folded).
   - Inbox pull: the EC Inbox Pull script (ec-userscripts src, cached in filesDir) in a hidden PC-size Outlook page with
     `#ec-inbox-run=<day>`, read only, unread put back. Days: today and the 6 before, like the dashboard. Then
