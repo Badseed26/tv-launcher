@@ -1483,6 +1483,11 @@ public class FilerActivity extends Activity {
         return true;
     }
 
+    /** The phone's still looking: keep its page up another 2 min. */
+    void webKeepAlive() {
+        if (showing != null) webUntil = System.currentTimeMillis() + 120000;
+    }
+
     String webWhich() {
         return showing == aroflo ? "aroflo" : showing == outlook ? "outlook" : "";
     }

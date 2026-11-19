@@ -6,6 +6,7 @@
 <style>
 :root{color-scheme:dark;--bg:#0b0f17;--card:rgba(255,255,255,.05);--line:rgba(255,255,255,.09);--text:#e8ecf4;--mute:#93a0b8;--blue:#6f8cff;--violet:#8a5bff;--good:#3ddc97;--warn:#ffc35a;--bad:#ff7a7a}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+[hidden]{display:none!important}
 body{margin:0;background:radial-gradient(1000px 500px at 10% -15%,#1d2b55 0,transparent 60%),radial-gradient(800px 420px at 110% 0,#3a1f5c 0,transparent 55%),var(--bg);color:var(--text);font:15px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;padding:calc(env(safe-area-inset-top) + 12px) 12px calc(env(safe-area-inset-bottom) + 16px);min-height:100vh}
 header{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
 h1{margin:0;font-size:19px;font-weight:650;letter-spacing:-.01em}
@@ -36,7 +37,7 @@ h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--mute
 <div class="note" id="note"></div>
 
 <div class="seg"><button data-s="outlook">Outlook</button><button data-s="aroflo">AroFlo</button><button data-s="">Filer screen</button></div>
-<div class="screen" id="screen"><img id="img" alt=""><div class="msg" id="msg">Pick Outlook or AroFlo to see it</div></div>
+<div class="screen" id="screen"><img id="img" alt=""><div class="msg" id="msg">Loading...</div></div>
 
 <div class="row"><button class="btn" data-k="back">Back</button><button class="btn" data-scroll="-500">Scroll up</button><button class="btn" data-scroll="500">Scroll down</button><button class="btn" data-k="reload">Reload page</button></div>
 <div class="row"><button class="btn" data-k="enter">Enter</button><button class="btn" data-k="tab">Tab</button><button class="btn" data-k="backspace">Delete</button><button class="btn" data-k="escape">Esc</button></div>
@@ -49,7 +50,7 @@ h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--mute
 <p class="small">Tap the picture to tap the TV. The page you're looking at shows on the TV while you use it and goes back behind the Filer screen 2 min after you stop.</p>
 
 <script>
-var S={which:'',st:{},busy:false,last:0};
+var S={which:null,st:{},gen:0};
 var $=function(id){return document.getElementById(id);};
 function post(url,data){
   var b=new URLSearchParams(data||{});
@@ -68,24 +69,25 @@ function status(){
   }).catch(function(){});
 }
 function showMsg(t){$('msg').textContent=t;$('msg').hidden=false;}
+// 20/11: the TV shows whatever was picked last, and pictures never change that (a picture on its way used to put
+// AroFlo back up after you'd picked the Filer screen).
 function pick(s){
-  S.which=s;
+  S.which=s;S.gen++;
   document.querySelectorAll('.seg button').forEach(function(b){b.classList.toggle('on',b.dataset.s===s);});
-  if(!s){post('/api/cmd',{c:'hide'});$('img').removeAttribute('src');showMsg('Showing the Filer screen on the TV');return;}
-  showMsg('Loading '+(s=='aroflo'?'AroFlo':'Outlook')+'...');
-  shot();
+  showMsg(s?'Loading '+(s=='aroflo'?'AroFlo':'Outlook')+'...':'Loading the Filer screen...');
+  post('/api/view',{s:s}).then(function(){setTimeout(shot,s?400:150);});
 }
 var timer=null;
 function shot(){
   clearTimeout(timer);
-  if(!S.which||document.hidden)return;
-  var s=S.which;
-  fetch('/api/shot?s='+s+'&t='+Date.now(),{cache:'no-store'}).then(function(r){
+  if(S.which===null||document.hidden)return;
+  var g=S.gen;
+  fetch('/api/shot?t='+Date.now(),{cache:'no-store'}).then(function(r){
     if(r.status==401){location.reload();throw 0;}
     if(!r.ok){return r.text().then(function(t){showMsg(S.st.filer===false?'The Filer\'s closed. Press Open Filer below.':(t||'No picture yet')+', trying again');return null;});}
     return r.blob();
   }).then(function(b){
-    if(!b||s!==S.which)return;
+    if(!b||g!==S.gen)return;
     var u=URL.createObjectURL(b),img=$('img'),old=img.src;
     img.onload=function(){if(old&&old.indexOf('blob:')==0)URL.revokeObjectURL(old);};
     img.src=u;$('msg').hidden=true;
@@ -108,5 +110,6 @@ $('text').addEventListener('keydown',function(e){if(e.key=='Enter'){e.preventDef
 $('sendcode').onclick=function(){var t=$('code').value.replace(/\D/g,'');if(!t)return;post('/api/code',{code:t}).then(function(){$('code').value='';setTimeout(shot,800);setTimeout(status,2000);});};
 document.addEventListener('visibilitychange',function(){if(!document.hidden){status();shot();}});
 status();setInterval(function(){if(!document.hidden)status();},3000);
+pick('');
 </script>
 </body></html>

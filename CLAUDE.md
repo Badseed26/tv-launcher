@@ -76,4 +76,4 @@ it never logs him out mid job. The filer script on the TV never stands down afte
 - Watch for false wakes (2:53 am on 19/11 had nothing to file). Suspect: conversation times moving when someone
   replies in a builder thread.
 - Never tested: a real power cut (does the listener, helper and mail check come back after the TV boots to standby).
-- Phone remote page is new (build 34/35): first real use 20/11.
+- Phone remote page is new (build 34 on): first real use 20/11. Pictures never change what the TV shows, only /api/view does (picking Outlook, AroFlo or Filer screen).

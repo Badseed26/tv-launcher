@@ -217,7 +217,18 @@ final class RemoteServer {
                 json(out, status());
                 return;
             case "/api/shot":
-                shot(out, a.get("s"));
+                shot(out);
+                return;
+            case "/api/view":
+                json(out, ok(onMain(new Job() {
+                    @Override
+                    public Object run(FilerActivity f) {
+                        String v = String.valueOf(a.get("s"));
+                        if (v.equals("outlook") || v.equals("aroflo")) return f.webShow(v);
+                        f.webHide();
+                        return true;
+                    }
+                })));
                 return;
             case "/api/tap":
                 json(out, ok(onMain(new Job() {
@@ -293,17 +304,19 @@ final class RemoteServer {
         return o;
     }
 
-    private void shot(OutputStream out, final String which) throws Exception {
+    /** A picture of whatever's on the TV's Filer right now (the page the phone picked, or the Filer screen). */
+    private void shot(OutputStream out) throws Exception {
         final CountDownLatch done = new CountDownLatch(1);
         final AtomicReference<byte[]> img = new AtomicReference<>();
         main.post(new Runnable() {
             @Override
             public void run() {
                 final FilerActivity f = FilerActivity.instance;
-                if (f == null || !f.webShow(which)) {
+                if (f == null) {
                     done.countDown();
                     return;
                 }
+                f.webKeepAlive();
                 // a moment for the page to draw at TV size if it's only just been put on screen
                 main.postDelayed(new Runnable() {
                     @Override
