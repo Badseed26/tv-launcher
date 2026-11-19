@@ -32,6 +32,19 @@ public class WakeActivity extends Activity {
         }
     }
 
+    /** Wakes the TV, then opens the Runner (it takes its job from RunnerActivity.start). */
+    static void startRunner(Context c) {
+        Context from = HomeButtonService.instance != null ? HomeButtonService.instance : c;
+        Intent i = new Intent(from, WakeActivity.class);
+        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        i.putExtra("runner", true);
+        try {
+            from.startActivity(i);
+        } catch (Exception e) {
+            TvLog.line(c, "Wake: couldn't start the wake screen: " + e.getMessage());
+        }
+    }
+
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
@@ -54,7 +67,9 @@ public class WakeActivity extends Activity {
                 PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
                 boolean on = pm != null && pm.isInteractive();
                 TvLog.line(WakeActivity.this, "Wake screen: TV " + (on ? "is on" : "still off"));
-                Intent next = new Intent(WakeActivity.this, filer ? FilerActivity.class : MainActivity.class);
+                boolean runner = getIntent().getBooleanExtra("runner", false);
+                Intent next = new Intent(WakeActivity.this, runner ? RunnerActivity.class
+                        : filer ? FilerActivity.class : MainActivity.class);
                 next.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 next.putExtra("auto", getIntent().getBooleanExtra("auto", false));
                 next.putExtra("wasOff", getIntent().getBooleanExtra("wasOff", false));

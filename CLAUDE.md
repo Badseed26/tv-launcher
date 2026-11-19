@@ -30,7 +30,8 @@ This repo is **public**: never put logins, PINs, tokens, IP addresses or the bus
 1. **Todoist TV remote** (task `6j3H69pvQ9hQ86pX` in the job tracker's settings section). Add a comment with a
    command; the TV polls every 20 s and answers with a comment starting `TV:`. Commands: wake, open filer,
    close filer, status, log, reload, press <label>, code <n>, update, web remote, web remote new pin, check mail,
-   test mail check, mail check on/off, mail check opens on/off, stay awake on/off. The TV ignores anything over
+   test mail check, mail check on/off, mail check opens on/off, stay awake on/off, inbox pull <day>,
+   lookup <terms; ...>. The TV ignores anything over
    30 min old and deletes comments over 2 days old. The task description is the TV's heartbeat (last check-in,
    build, screen, Filer states, last mail check), rewritten every few minutes; the dashboard shows it.
 2. **Phone remote page** (build 34 on, `RemoteServer.java`, `assets/remote.html`, `assets/remote-login.html`).
@@ -50,6 +51,18 @@ This repo is **public**: never put logins, PINs, tokens, IP addresses or the bus
   open). `probe.js` reads each page's state every 8 s and fills the saved logins. Taps are real MotionEvents
   (AroFlo's Continue ignores script clicks). Closing the Filer shuts everything down. Auto runs (opened by the mail
   check) close themselves after about a minute of nothing to do and put the TV back to sleep if it was off.
+- `RunnerActivity` (build 37 on): runs Ethan's other scripts on the TV, one job at a time, then goes back to how the TV
+  was (Filer reopened, asleep again, or home). Never takes the TV off HDMI or another app.
+  - Inbox pull: the EC Inbox Pull script (ec-userscripts src, cached in filesDir) in a hidden PC-size Outlook page with
+    `#ec-inbox-run=<day>`, read only, unread put back. Days: today and the 6 before, like the dashboard. Then
+    `assets/runner-af.js` reads 5 weeks of the AroFlo calendar into the bundle. The bundle goes on the TV remote task as
+    a file (`ec-inbox-<day>.txt`, Todoist upload; split into comments if that fails). Start it from the Runner tile on
+    the home screen, the phone page's Runner day picker, or `inbox pull <day>` on the Todoist remote.
+  - Lookup: `lookup 9364; Norman Dr; po 20251598; client Smith; desc solar; notes 9364` answers AroFlo task searches
+    and a task's notes and upcoming schedules (read only) as a TV: comment. For the inbox check when the PC's off.
+  - AroFlo writes still go through the filer's queues (filer-note, filer-site labels on follow ups). ListenService opens
+    the Filer for them every 5 min while the TV's off or home (once per 30 min), and an auto run doesn't close while
+    any are queued.
 - `ListenService`: foreground service with a partial wake lock, beat every 60 s. Runs the mail check every 5 min
   while the TV's off or on the home screen (never over an HDMI input or another app). Starts `RemoteServer`.
 - `Peek`: the screen-off mail check. Replays Outlook's own mail list request with the kept sign-in (code only,

@@ -779,8 +779,24 @@ public class FilerActivity extends Activity {
     }
 
     /** Auto run: close once the filer's had time to look and has nothing going, or give up after 12 min. */
+    /** Follow ups queued for AroFlo (notes, site info), checked once a minute on auto runs. Not idle while there are any. */
+    private volatile int queuedWork;
+    private long queueCheckedAt;
+
     private void checkAutoDone() {
         long ran = System.currentTimeMillis() - openedAt;
+        if (System.currentTimeMillis() - queueCheckedAt > 60000) {
+            queueCheckedAt = System.currentTimeMillis();
+            try {
+                net.execute(new Runnable() {
+                    @Override
+                    public void run() {
+                        queuedWork = ListenService.queued(getApplicationContext());
+                    }
+                });
+            } catch (Exception ignored) {
+            }
+        }
         try {
             String dev = store == null ? null : store.getJson("wfDev");
             if (dev != null && new JSONObject(dev).optBoolean("ok", true) == false && ran > 60000) {
@@ -809,6 +825,7 @@ public class FilerActivity extends Activity {
     /** Both pages up, nothing queued or mid way, and both filer tabs saying they're idle. */
     private boolean filerIdle() {
         if (!"Alive".equals(outlook.state) || !"Alive".equals(aroflo.state) || store == null) return false;
+        if (queuedWork > 0) return false;
         try {
             String p = store.getJson("wfPending");
             if (p != null && !p.equals("null")) return false;

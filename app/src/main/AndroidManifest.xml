@@ -74,6 +74,16 @@
             android:windowSoftInputMode="adjustNothing" />
 
         <activity
+            android:name=".RunnerActivity"
+            android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout|uiMode|density"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:screenOrientation="landscape"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:windowSoftInputMode="adjustNothing" />
+
+        <activity
             android:name=".WakeActivity"
             android:excludeFromRecents="true"
             android:exported="false"

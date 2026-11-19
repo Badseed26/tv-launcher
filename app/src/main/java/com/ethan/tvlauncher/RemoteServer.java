@@ -5,6 +5,7 @@ import android.content.SharedPreferences;
 import android.os.Handler;
 import android.os.Looper;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.BufferedInputStream;
@@ -285,6 +286,10 @@ final class RemoteServer {
         o.put("build", Updater.currentVersion(c));
         o.put("note", note);
         o.put("check", Peek.last);
+        o.put("runner", RunnerActivity.instance != null ? RunnerActivity.state : "");
+        JSONArray days = new JSONArray();
+        for (String d : RunnerActivity.days()) days.put(new JSONArray().put(d).put(RunnerActivity.nice(d)));
+        o.put("days", days);
         android.os.PowerManager pm = (android.os.PowerManager) c.getSystemService(Context.POWER_SERVICE);
         o.put("screen", pm != null && pm.isInteractive());
         onMain(new Job() {
@@ -342,6 +347,35 @@ final class RemoteServer {
 
     private JSONObject cmd(String cmd) throws Exception {
         JSONObject o = new JSONObject();
+        if (cmd.startsWith("pull:")) {
+            final String day = RunnerActivity.parseDay(cmd.substring(5));
+            if (day == null) {
+                note = "Can only pull today or the 6 days before.";
+                o.put("ok", false);
+                return o;
+            }
+            note = "Starting the inbox pull for " + RunnerActivity.nice(day) + "...";
+            main.post(new Runnable() {
+                @Override
+                public void run() {
+                    RunnerActivity.Job j = new RunnerActivity.Job();
+                    j.kind = "pull";
+                    j.day = day;
+                    j.from = "phone";
+                    j.say = new Remote.Say() {
+                        @Override
+                        public void say(String text) {
+                            note = text;
+                        }
+                    };
+                    String r = RunnerActivity.start(c, j);
+                    note = r != null ? r : "Pulling the inbox for " + RunnerActivity.nice(day)
+                            + ". Takes a couple of minutes, the bundle goes on the TV remote task in Todoist.";
+                }
+            });
+            o.put("ok", true);
+            return o;
+        }
         switch (cmd) {
             case "open":
                 main.post(new Runnable() {

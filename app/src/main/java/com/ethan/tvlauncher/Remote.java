@@ -23,7 +23,7 @@ final class Remote {
 
     static final String TASK = "6j3H69pvQ9hQ86pX";
     private static final long EVERY_MS = 20000;
-    private static final String HELP = "Commands: wake, open filer, close filer, status, log, reload, press <button text>, code <number>, stay awake on, stay awake off, update, web remote, web remote new pin, check mail, test mail check, mail check on, mail check off, mail check opens on, mail check opens off";
+    private static final String HELP = "Commands: wake, open filer, close filer, status, log, reload, press <button text>, code <number>, stay awake on, stay awake off, update, web remote, web remote new pin, check mail, test mail check, mail check on, mail check off, mail check opens on, mail check opens off, inbox pull <day>, lookup <terms; ...>";
 
     private static Remote inst;
 
@@ -101,7 +101,9 @@ final class Remote {
             p.edit().putString("seen", seen).apply();
             String text = o.optString("content", "").trim();
             if (text.isEmpty() || text.startsWith("TV:")) continue;
-            final String cmd = text.replaceAll("\\s+", " ");
+            // lookups can come one a line: keep them apart
+            final String cmd = text.toLowerCase(Locale.ROOT).startsWith("lookup")
+                    ? text.replaceAll("[ \\t]+", " ").replaceAll("\\s*\\n\\s*", "; ") : text.replaceAll("\\s+", " ");
             handle(token, cmd);
         }
         prune(token, all);
@@ -193,6 +195,45 @@ final class Remote {
                         }
                     });
                     reply = null;
+                } else if (lc.equals("inbox pull") || lc.startsWith("inbox pull ") || lc.equals("pull") || lc.startsWith("pull ")) {
+                    String arg = cmd.replaceFirst("(?i)^(inbox )?pull\\s*", "").trim();
+                    String day = RunnerActivity.parseDay(arg);
+                    if (day == null) {
+                        reply = "Can only pull today or the 6 days before (like the dashboard). Try inbox pull today, yesterday, thu or 19/11.";
+                    } else {
+                        RunnerActivity.Job j = new RunnerActivity.Job();
+                        j.kind = "pull";
+                        j.day = day;
+                        j.from = "remote";
+                        j.say = new Say() {
+                            @Override
+                            public void say(String text) {
+                                Remote.this.say(token, text);
+                            }
+                        };
+                        String r = RunnerActivity.start(c, j);
+                        reply = r != null ? r : "Pulling the inbox for " + RunnerActivity.nice(day)
+                                + (f != null ? " (Filer closed for now, it reopens after)" : "")
+                                + ". Takes a couple of minutes, the bundle comes back here as a file.";
+                    }
+                } else if (lc.startsWith("lookup")) {
+                    List<String> terms = new ArrayList<>();
+                    for (String t : cmd.substring(6).split(";")) if (!t.replaceFirst("^[\\s:,]+", "").trim().isEmpty()) terms.add(t.replaceFirst("^[\\s:,]+", "").trim());
+                    if (terms.isEmpty()) {
+                        reply = "lookup what? e.g. lookup 9364; Norman Dr; po 20251598; notes 9364";
+                    } else {
+                        RunnerActivity.Job j = new RunnerActivity.Job();
+                        j.kind = "lookup";
+                        j.terms = terms;
+                        j.from = "remote";
+                        j.say = new Say() {
+                            @Override
+                            public void say(String text) {
+                                Remote.this.say(token, text);
+                            }
+                        };
+                        reply = RunnerActivity.start(c, j);
+                    }
                 } else if (lc.equals("test mail check")) {
                     if (f != null) {
                         reply = "Close the Filer first, the test opens it itself.";
@@ -261,7 +302,8 @@ final class Remote {
                             + (ListenService.stayAwake(c) ? ", stay awake on" : ", stay awake off")
                             + (ListenService.peekOn(c) ? ", mail check on" + (ListenService.peekOpens(c) ? " (opens the Filer)" : " (log only)") : ", mail check off") + "."
                             + (Peek.last.isEmpty() ? "" : "\nLast " + Peek.last)
-                            + (f != null && f.isAuto() ? "\nThis Filer was opened by the mail check." : "");
+                            + (f != null && f.isAuto() ? "\nThis Filer was opened by the mail check." : "")
+                            + (RunnerActivity.instance != null ? "\nRunner: " + RunnerActivity.state : "");
                     reply = f == null ? "Filer's closed. " + tv : f.remoteStatus() + "\n" + tv;
                 } else if (lc.equals("log")) {
                     List<String> l = f != null ? f.filerLog(20) : null;

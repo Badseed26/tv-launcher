@@ -28,6 +28,7 @@ h1{margin:0;font-size:19px;font-weight:650;letter-spacing:-.01em}
 .btn{border:1px solid var(--line);background:var(--card);color:var(--text);padding:12px 6px;border-radius:12px;font-size:14px;font-weight:600}
 .btn:active{transform:scale(.97)}
 .btn.primary{border:0;background:linear-gradient(135deg,var(--blue),var(--violet));color:#fff}
+select{min-width:0;border:1px solid var(--line);background:rgba(0,0,0,.25);color:#fff;padding:12px;border-radius:12px;font-size:16px;outline:none;-webkit-appearance:none;appearance:none}
 input{min-width:0;border:1px solid var(--line);background:rgba(0,0,0,.25);color:#fff;padding:12px;border-radius:12px;font-size:16px;outline:none}
 input:focus{border-color:var(--blue)}
 h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--mute);margin:18px 2px 0;font-weight:600}
@@ -47,6 +48,9 @@ h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--mute
 <h2>Filer</h2>
 <div class="row"><button class="btn" data-c="open">Open Filer</button><button class="btn" data-c="close">Close Filer</button><button class="btn" data-c="reload">Reload both</button></div>
 <div class="row"><button class="btn" data-c="check">Check mail</button><button class="btn" data-c="update">Update TV</button></div>
+<h2>Runner</h2>
+<div class="row"><select id="day"></select><button class="btn primary" id="pull" style="flex:0 0 110px">Pull inbox</button></div>
+<p class="small" id="runner">Reads the day's Inbox and Sent Items (read only, unread put back) plus the next 5 weeks of AroFlo bookings, and drops the bundle on the TV remote task for the inbox check. The Filer closes while it runs and reopens after.</p>
 <p class="small">Tap the picture to tap the TV. The page you're looking at shows on the TV while you use it and goes back behind the Filer screen 2 min after you stop.</p>
 
 <script>
@@ -65,6 +69,8 @@ function status(){
     S.st=o;
     $('chips').innerHTML=(o.filer?chip('Outlook',o.outlook)+chip('AroFlo',o.aroflo):'<span class="chip bad"><b>Filer closed</b></span>')+'<span class="chip">build <b>'+o.build+'</b></span>';
     $('note').textContent=o.note||(o.check?'Last mail check '+o.check:'');
+    if(o.days&&!$('day').options.length){$('day').innerHTML=o.days.map(function(d){return '<option value="'+d[0]+'">'+d[1]+'</option>';}).join('');}
+    if(o.runner)$('runner').textContent='Runner: '+o.runner;
     if(!o.filer){showMsg('The Filer\'s closed. Press Open Filer below.');}
   }).catch(function(){});
 }
@@ -105,6 +111,7 @@ document.querySelectorAll('[data-c]').forEach(function(b){b.onclick=function(){
   if(b.dataset.c=='close'&&!confirm('Close the Filer on the TV?'))return;
   post('/api/cmd',{c:b.dataset.c}).then(function(){setTimeout(status,400);setTimeout(status,3000);});
 };});
+$('pull').onclick=function(){var d=$('day').value;if(!d)return;var t=$('day').options[$('day').selectedIndex].text;if(!confirm('Pull the inbox for '+t+' on the TV?'))return;post('/api/cmd',{c:'pull:'+d}).then(function(){setTimeout(status,400);setTimeout(status,3000);});};
 $('send').onclick=function(){var t=$('text').value;if(!t)return;post('/api/type',{text:t}).then(function(){$('text').value='';setTimeout(shot,300);});};
 $('text').addEventListener('keydown',function(e){if(e.key=='Enter'){e.preventDefault();$('send').onclick();}});
 $('sendcode').onclick=function(){var t=$('code').value.replace(/\D/g,'');if(!t)return;post('/api/code',{code:t}).then(function(){$('code').value='';setTimeout(shot,800);setTimeout(status,2000);});};

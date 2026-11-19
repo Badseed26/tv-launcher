@@ -136,6 +136,7 @@ public class ListenService extends Service {
                 screenWasOn = on;
             }
             peekIfDue(on);
+            queueIfDue(on);
             if (now - Status.lastWrite > 5 * 60000) Status.write(ListenService.this, null);
             bg.postDelayed(this, 60000);
         }
@@ -149,12 +150,64 @@ public class ListenService extends Service {
         new android.os.Handler(android.os.Looper.getMainLooper()).post(new Runnable() {
             @Override
             public void run() {
-                if (FilerActivity.instance != null || Peek.busy) return; // Filer's open: it's watching mail itself
+                if (FilerActivity.instance != null || RunnerActivity.instance != null || Peek.busy) return; // Filer's open: it's watching mail itself
                 if (screenOn && !Updater.homeVisible) return; // something's being watched, wait
                 lastPeek = System.currentTimeMillis();
                 peekNow(c, null);
             }
         });
+    }
+
+    private long lastQueue;
+
+    /**
+     * 20/11: notes and site info lines queued for AroFlo (filer-note, filer-site, from the dashboard or the inbox check)
+     * only go on while the Filer's open. Every 5 min while the TV's off or on the home screen, open it for them like a
+     * builder email does. Same switch as the mail check opening the Filer.
+     */
+    private void queueIfDue(final boolean screenOn) {
+        final Context c = this;
+        if (!peekOn(c) || !peekOpens(c) || System.currentTimeMillis() - lastQueue < PEEK_MS) return;
+        if (FilerActivity.instance != null || RunnerActivity.instance != null) return;
+        lastQueue = System.currentTimeMillis();
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                final int n = queued(c);
+                if (n <= 0) return;
+                new android.os.Handler(android.os.Looper.getMainLooper()).post(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (FilerActivity.instance != null || RunnerActivity.instance != null || Peek.busy) return;
+                        // one go per half hour, so an item the filer can't do doesn't keep waking the TV
+                        if (System.currentTimeMillis() - prefs(c).getLong("queueOpenAt", 0) < 30 * 60000) return;
+                        TvLog.line(c, "Note queue: " + n + " waiting for AroFlo");
+                        openIfFree(c, null, false);
+                    }
+                });
+            }
+        }, "queue-check").start();
+    }
+
+    static final String FU_PROJECT = "6hfHcM9Gf74fgcJw";
+
+    /** How many follow ups are queued for the filer to put on AroFlo. -1 if Todoist can't be reached. Not the main thread. */
+    static int queued(Context c) {
+        try {
+            String token = Secrets.get(c, Secrets.TODOIST_TOKEN);
+            if (token == null) return -1;
+            String q = java.net.URLEncoder.encode("@filer-note | @filer-site", "UTF-8");
+            org.json.JSONArray a = new org.json.JSONObject(Http.todoist(token, "GET", "tasks/filter?query=" + q + "&limit=50", null))
+                    .optJSONArray("results");
+            int n = 0;
+            if (a != null) for (int i = 0; i < a.length(); i++) {
+                org.json.JSONObject t = a.getJSONObject(i);
+                if (FU_PROJECT.equals(t.optString("project_id")) && !t.optBoolean("checked")) n++;
+            }
+            return n;
+        } catch (Exception e) {
+            return -1;
+        }
     }
 
     /** Main thread. Runs the check, logs it, and opens the Filer on a hit if that's switched on. */
@@ -221,17 +274,32 @@ public class ListenService extends Service {
                 new android.os.Handler(android.os.Looper.getMainLooper()).post(new Runnable() {
                     @Override
                     public void run() {
-                        TvLog.line(c, other != null ? "Mail check: not opening the Filer, it's running on the " + other
-                                : "Mail check:" + openForMail(c, r, test));
+                        String what = r == null ? "Note queue" : "Mail check";
+                        TvLog.line(c, other != null ? what + ": not opening the Filer, it's running on the " + other
+                                : what + ":" + (r == null ? openForQueue(c) : openForMail(c, r, test)));
                     }
                 });
             }
         }, "open-check").start();
     }
 
+    /** Notes are waiting: wake the TV if it's off and run the Filer, which closes itself once they're on. */
+    private static String openForQueue(final Context c) {
+        if (FilerActivity.instance != null) return " Filer's already open.";
+        if (RunnerActivity.instance != null) return " The Runner's going, leaving it.";
+        android.os.PowerManager pm = (android.os.PowerManager) c.getSystemService(Context.POWER_SERVICE);
+        boolean on = pm != null && pm.isInteractive();
+        if (on && !Updater.homeVisible) return " Not opening the Filer, something's on the TV.";
+        prefs(c).edit().putLong("queueOpenAt", System.currentTimeMillis()).apply();
+        if (!on) wakeScreen(c);
+        WakeActivity.start(c, true, true, !on);
+        return " Opening the Filer to put them on" + (on ? "." : " (waking the TV).");
+    }
+
     /** A builder email's in: wake the TV if it's off and run the Filer, which closes itself once it's filed it. */
     private static String openForMail(final Context c, Peek.Result r, boolean test) {
         if (FilerActivity.instance != null) return " Filer's already open.";
+        if (RunnerActivity.instance != null) return " The Runner's going, leaving it.";
         android.os.PowerManager pm = (android.os.PowerManager) c.getSystemService(Context.POWER_SERVICE);
         boolean on = pm != null && pm.isInteractive();
         if (on && !Updater.homeVisible) return " Not opening the Filer, something's on the TV.";

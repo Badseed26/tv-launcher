@@ -103,6 +103,12 @@ public class MainActivity extends Activity implements Ui.FocusListener {
                 startActivity(new Intent(MainActivity.this, FilerActivity.class));
             }
         });
+        TextView runner = Ui.pill(this, "Runner", new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                startActivity(new Intent(MainActivity.this, RunnerActivity.class));
+            }
+        });
         TextView updates = Ui.pill(this, "Updates", new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -122,6 +128,10 @@ public class MainActivity extends Activity implements Ui.FocusListener {
             }
         });
         buttons.addView(filer);
+        LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        rlp.leftMargin = Ui.dp(this, 14);
+        buttons.addView(runner, rlp);
         LinearLayout.LayoutParams ulp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         ulp.leftMargin = Ui.dp(this, 14);
