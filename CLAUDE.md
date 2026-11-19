@@ -55,7 +55,8 @@ This repo is **public**: never put logins, PINs, tokens, IP addresses or the bus
   was (Filer reopened, asleep again, or home). Never takes the TV off HDMI or another app.
   - Inbox pull: the EC Inbox Pull script (ec-userscripts src, cached in filesDir) in a hidden PC-size Outlook page with
     `#ec-inbox-run=<day>`, read only, unread put back. Days: today and the 6 before, like the dashboard. Then
-    `assets/runner-af.js` reads 5 weeks of the AroFlo calendar into the bundle. The bundle goes on the TV remote task as
+    `assets/runner-af.js` (loaded from GitHub main each run, so a push to it is live without a build; the built-in
+    copy is the fallback) reads 5 weeks of the AroFlo calendar into the bundle. The bundle goes on the TV remote task as
     a file (`ec-inbox-<day>.txt`, Todoist upload; split into comments if that fails). Start it from the Runner tile on
     the home screen, the phone page's Runner day picker, or `inbox pull <day>` on the Todoist remote.
   - Lookup: `lookup 9364; Norman Dr; po 20251598; client Smith; desc solar; notes 9364` answers AroFlo task searches

@@ -57,6 +57,10 @@ public class RunnerActivity extends Activity {
 
     private static final String PULL_URL =
             "https://raw.githubusercontent.com/Badseed26/ec-userscripts/main/src/ec-inbox-pull.js";
+    // 20/11: the AroFlo side (calendar and lookups) loads from GitHub like the Inbox Pull, so a fix to it is live on the
+    // next run without a new build. The copy built into the app is the fallback.
+    private static final String AF_URL =
+            "https://raw.githubusercontent.com/Badseed26/tv-launcher/main/app/src/main/assets/runner-af.js";
     private static final String OUTLOOK = "https://outlook.cloud.microsoft/mail/";
     private static final String CAL_URL = "https://office.aroflo.com/ims/Site/Calendar/index.cfm?viewfullcalendar=1&tid=IMS.CAL";
     private static final String AF_HOME = "https://office.aroflo.com/ims/Site/Home/index.cfm";
@@ -366,7 +370,18 @@ public class RunnerActivity extends Activity {
             title.setText("Runner  ·  AroFlo lookup");
             setNow("Looking up " + j.terms.size() + " in AroFlo...");
             say("Lookup: " + android.text.TextUtils.join("; ", j.terms), DIM);
-            openAroFlo(AF_HOME);
+            net.execute(new Runnable() {
+                @Override
+                public void run() {
+                    loadAf();
+                    handler.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            if (alive && job != null) openAroFlo(AF_HOME);
+                        }
+                    });
+                }
+            });
             return;
         }
         title.setText("Runner  ·  inbox pull, " + nice(j.day));
@@ -375,6 +390,7 @@ public class RunnerActivity extends Activity {
         net.execute(new Runnable() {
             @Override
             public void run() {
+                loadAf();
                 final String src = loadScript();
                 handler.post(new Runnable() {
                     @Override
@@ -836,6 +852,29 @@ public class RunnerActivity extends Activity {
         } catch (Exception ignored) {
         }
         return null;
+    }
+
+    /** Newest AroFlo side from GitHub (kept on the TV), else the last good copy, else the one built in. */
+    private void loadAf() {
+        File cache = new File(getFilesDir(), "runner-af.js");
+        try {
+            String src = Http.get(AF_URL + "?t=" + System.currentTimeMillis(), 15000);
+            if (src.contains("__JOB__") && src.contains("ecRun.done")) {
+                FileWriter w = new FileWriter(cache, false);
+                w.write(src);
+                w.close();
+                afJs = src;
+                return;
+            }
+        } catch (Exception ignored) {
+        }
+        try {
+            if (cache.exists()) {
+                String c = read(new java.io.FileInputStream(cache));
+                if (c.contains("__JOB__")) afJs = c;
+            }
+        } catch (Exception ignored) {
+        }
     }
 
     private static String versionOf(String src) {
