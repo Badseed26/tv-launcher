@@ -31,6 +31,8 @@ final class Updater {
 
     /** Install confirmation waiting to be shown once the home screen is visible. */
     static volatile Intent pendingConfirm;
+    /** Set by the remote Update command: until then, the helper presses Install on our own update's prompt. */
+    static volatile long autoConfirmUntil;
     static volatile boolean homeVisible;
     private static volatile boolean busy;
 
@@ -56,6 +58,38 @@ final class Updater {
     }
 
     /** Check now. manual = true shows every result, false stays quiet unless updating. */
+    /** From the dashboard's Update TV button. Replies with what it's doing. */
+    static void remoteUpdate(final Context ctx, final Remote.Say say) {
+        final Context c = ctx.getApplicationContext();
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    JSONObject j = new JSONObject(getString(VERSION_URL + "?t=" + System.currentTimeMillis()));
+                    int latest = j.getInt("versionCode"), mine = currentVersion(c);
+                    if (latest <= mine) {
+                        say.say("Already up to date (build " + mine + ").");
+                        return;
+                    }
+                    if (HomeButtonService.instance == null) {
+                        say.say("Build " + latest + " is out but the Home helper isn't running, so it can't press Install. Update it at the TV.");
+                        return;
+                    }
+                    boolean filer = FilerActivity.instance != null;
+                    c.getSharedPreferences("updater", Context.MODE_PRIVATE).edit()
+                            .putBoolean("reopenFiler", filer).putLong("remoteAt", System.currentTimeMillis()).commit();
+                    autoConfirmUntil = System.currentTimeMillis() + 3 * 60000;
+                    TvLog.line(c, "Update: remote update to build " + latest + " (from " + mine + ")");
+                    say.say("Updating build " + mine + " to " + latest + ". The TV restarts the app"
+                            + (filer ? " and opens the Filer again" : "") + ". Send status in a couple of minutes.");
+                    check(c, false);
+                } catch (Exception e) {
+                    say.say("Update check failed: " + e.getMessage());
+                }
+            }
+        }, "remote-update").start();
+    }
+
     static void check(Context ctx, final boolean manual) {
         final Context c = ctx.getApplicationContext();
         if (busy) {
@@ -109,7 +143,21 @@ final class Updater {
     /** Shows the install confirmation if one is waiting and the home screen is up. */
     static void showPendingConfirm(Context c) {
         Intent confirm = pendingConfirm;
-        if (confirm == null || !homeVisible) return;
+        boolean remote = System.currentTimeMillis() < autoConfirmUntil;
+        if (confirm == null || (!homeVisible && !remote)) return;
+        if (remote) {
+            // remote update: wake the TV if it's off, open the prompt from the helper (allowed from the background)
+            pendingConfirm = null;
+            ListenService.wakeScreen(c);
+            Context from = HomeButtonService.instance != null ? HomeButtonService.instance : c.getApplicationContext();
+            try {
+                from.startActivity(confirm);
+                TvLog.line(c, "Update: install prompt opened, the helper presses Install");
+            } catch (Exception e) {
+                TvLog.line(c, "Update: couldn't open the install prompt: " + e.getMessage());
+            }
+            return;
+        }
         pendingConfirm = null;
         try {
             c.getApplicationContext().startActivity(confirm);

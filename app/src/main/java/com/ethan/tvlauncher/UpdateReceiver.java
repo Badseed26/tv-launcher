@@ -20,6 +20,7 @@ public class UpdateReceiver extends BroadcastReceiver {
             }
         } else if (status != PackageInstaller.STATUS_SUCCESS) {
             String msg = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE);
+            if (System.currentTimeMillis() < Updater.autoConfirmUntil) TvLog.line(c, "Update didn't install" + (msg != null ? ": " + msg : ""));
             Updater.toast(c, "Update didn't install" + (msg != null ? ": " + msg : ""));
         }
     }

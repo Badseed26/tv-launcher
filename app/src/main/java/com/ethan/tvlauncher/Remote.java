@@ -23,7 +23,7 @@ final class Remote {
 
     static final String TASK = "6j3H69pvQ9hQ86pX";
     private static final long EVERY_MS = 20000;
-    private static final String HELP = "Commands: wake, open filer, close filer, status, log, reload, press <button text>, code <number>, stay awake on, stay awake off, check mail, test mail check, mail check on, mail check off, mail check opens on, mail check opens off";
+    private static final String HELP = "Commands: wake, open filer, close filer, status, log, reload, press <button text>, code <number>, stay awake on, stay awake off, update, check mail, test mail check, mail check on, mail check off, mail check opens on, mail check opens off";
 
     private static Remote inst;
 
@@ -101,6 +101,10 @@ final class Remote {
         }
     }
 
+    interface Say {
+        void say(String text);
+    }
+
     private void say(final String token, String text) {
         final String out = "TV: " + text;
         bg.post(new Runnable() {
@@ -133,6 +137,14 @@ final class Remote {
                     // Try 2: a screen that asks Android to switch the TV on as it opens
                     if (!screenOn) WakeActivity.start(c, false);
                     reply = screenOn ? "TV was already on." : "Turning the TV on. Send status in a few seconds to check.";
+                } else if (lc.equals("update") || lc.equals("update tv")) {
+                    Updater.remoteUpdate(c, new Say() {
+                        @Override
+                        public void say(String text) {
+                            Remote.this.say(token, text);
+                        }
+                    });
+                    reply = null;
                 } else if (lc.equals("test mail check")) {
                     if (f != null) {
                         reply = "Close the Filer first, the test opens it itself.";
@@ -230,6 +242,7 @@ final class Remote {
                 } else {
                     reply = "Didn't get that. " + HELP;
                 }
+                if (reply == null) return; // answered later (update)
                 final String out = "TV: " + reply;
                 bg.post(new Runnable() {
                     @Override

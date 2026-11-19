@@ -61,6 +61,27 @@ public class HomeButtonService extends AccessibilityService {
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
+        // Only while a remote update is going: press Install on the system prompt for our own app, nothing else.
+        if (System.currentTimeMillis() > Updater.autoConfirmUntil || event == null) return;
+        CharSequence pkg = event.getPackageName();
+        if (pkg == null || !pkg.toString().contains("packageinstaller")) return;
+        android.view.accessibility.AccessibilityNodeInfo root = getRootInActiveWindow();
+        if (root == null) return;
+        String me = String.valueOf(getApplicationInfo().loadLabel(getPackageManager()));
+        if (root.findAccessibilityNodeInfosByText(me).isEmpty()) return; // not our app's prompt
+        for (String label : new String[]{"Install", "Update", "INSTALL", "UPDATE"}) {
+            for (android.view.accessibility.AccessibilityNodeInfo n : root.findAccessibilityNodeInfosByText(label)) {
+                CharSequence t = n.getText();
+                if (t == null || !t.toString().trim().equalsIgnoreCase(label)) continue;
+                android.view.accessibility.AccessibilityNodeInfo b = n;
+                while (b != null && !b.isClickable()) b = b.getParent();
+                if (b != null && b.isEnabled() && b.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK)) {
+                    Updater.autoConfirmUntil = System.currentTimeMillis() + 60000; // keep watching in case there's a second screen
+                    TvLog.line(this, "Update: pressed " + t + " on the install prompt");
+                    return;
+                }
+            }
+        }
     }
 
     @Override
