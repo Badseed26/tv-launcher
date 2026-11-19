@@ -135,6 +135,7 @@ public class ListenService extends Service {
                 screenWasOn = on;
             }
             peekIfDue(on);
+            if (now - Status.lastWrite > 5 * 60000) Status.write(ListenService.this, null);
             bg.postDelayed(this, 60000);
         }
     };
@@ -169,6 +170,12 @@ public class ListenService extends Service {
             @Override
             public void done(Peek.Result r) {
                 String extra = "";
+                // a signed out Outlook means no builder email wakes the TV: say so once, tick it off once it's back
+                if (r.ok) Alerts.clear(c, "outlook-out");
+                else if (r.error.contains("signed out")) Alerts.raise(c, "outlook-out", "TV: Outlook is signed out on the TV",
+                        "The TV's mail check found Outlook signed out, so no builder email will wake it. Open the Filer on the "
+                                + "TV (or send open filer) so it signs back in.");
+                Status.write(c, r);
                 if (test && r.ok) {
                     Peek.Result t = new Peek.Result();
                     Peek.analyse(c, r.items, t, true);

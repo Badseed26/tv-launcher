@@ -70,7 +70,7 @@ final class Remote {
         if (token == null) return;
         List<JSONObject> all = new ArrayList<>();
         String cursor = null;
-        for (int page = 0; page < 5; page++) {
+        for (int page = 0; page < 20; page++) {
             String path = "comments?task_id=" + TASK + "&limit=100" + (cursor != null ? "&cursor=" + URLEncoder.encode(cursor, "UTF-8") : "");
             JSONObject res = new JSONObject(Http.todoist(token, "GET", path, null));
             JSONArray a = res.optJSONArray("results");
@@ -88,9 +88,14 @@ final class Remote {
             p.edit().putString("seen", sb.toString()).apply();
             return;
         }
+        long now = System.currentTimeMillis();
         for (JSONObject o : all) {
             String id = o.optString("id");
             if (seen.contains("," + id + ",")) continue;
+            // 19/11: the seen list only holds the last couple of hundred ids, so a long-lived task would start re-running
+            // old commands. Anything over 30 min old is never a fresh command.
+            long at = postedAt(o);
+            if (at > 0 && now - at > 30 * 60000) continue;
             seen = seen + id + ",";
             if (seen.length() > 6000) seen = "," + seen.substring(seen.length() - 4000).replaceFirst("^[^,]*,", "");
             p.edit().putString("seen", seen).apply();
@@ -98,6 +103,41 @@ final class Remote {
             if (text.isEmpty() || text.startsWith("TV:")) continue;
             final String cmd = text.replaceAll("\\s+", " ");
             handle(token, cmd);
+        }
+        prune(token, all);
+    }
+
+    /** Comments older than 2 days get deleted, an hour apart at most, so the task (and every poll) stays small. */
+    private void prune(String token, List<JSONObject> all) {
+        SharedPreferences p = prefs();
+        long now = System.currentTimeMillis();
+        if (now - p.getLong("pruned", 0) < 60 * 60000) return;
+        p.edit().putLong("pruned", now).apply();
+        int n = 0;
+        for (JSONObject o : all) {
+            long at = postedAt(o);
+            if (at <= 0 || now - at < 2 * 24 * 3600000L) continue;
+            try {
+                Http.todoist(token, "DELETE", "comments/" + o.optString("id"), null);
+                n++;
+            } catch (Exception e) {
+                break;
+            }
+            if (n >= 40) break;
+        }
+        if (n > 0) TvLog.line(c, "Remote: cleared " + n + " old comments off the TV remote task");
+    }
+
+    private static long postedAt(JSONObject o) {
+        String s = o.optString("posted_at", "");
+        if (s.isEmpty()) return 0;
+        try {
+            java.text.SimpleDateFormat f = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US);
+            f.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+            java.util.Date d = f.parse(s.length() >= 19 ? s.substring(0, 19) : s);
+            return d == null ? 0 : d.getTime();
+        } catch (Exception e) {
+            return 0;
         }
     }
 

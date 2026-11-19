@@ -507,6 +507,7 @@ public class FilerActivity extends Activity {
             refreshAges();
             renderLog();
             if (auto) checkAutoDone();
+            watchSignIns();
             handler.postDelayed(this, TICK_MS);
         }
     };
@@ -700,6 +701,77 @@ public class FilerActivity extends Activity {
         ActivityManager.MemoryInfo mi = new ActivityManager.MemoryInfo();
         am.getMemoryInfo(mi);
         return mi.availMem / (1024 * 1024);
+    }
+
+    private long outlookOutSince, aroOutSince, lastAutoContinue;
+
+    /**
+     * 19/11. Outlook signed out for 10 min: a follow up, since nothing gets filed till it's back. AroFlo bumped by the
+     * session limit (you signed in as yourself somewhere else): it only takes AroFlo back when there's AroFlo work waiting.
+     * Nights and weekends it presses CONTINUE itself (at most every 20 min); in work hours you get a follow up instead, so it
+     * never logs you out of AroFlo while you're using it.
+     */
+    private void watchSignIns() {
+        long now = System.currentTimeMillis();
+        if ("Alive".equals(outlook.state)) {
+            outlookOutSince = 0;
+            Alerts.clear(this, "outlook-out");
+        } else if (outlook.state.startsWith("Sign") || outlook.state.startsWith("Approve") || outlook.state.startsWith("Needs")) {
+            if (outlookOutSince == 0) outlookOutSince = now;
+            else if (now - outlookOutSince > 10 * 60000)
+                Alerts.raise(this, "outlook-out", "TV: Outlook is signed out on the TV",
+                        "Outlook on the TV has said '" + outlook.state + "' for 10 min. No builder email gets filed till it's back. "
+                                + "If it says Approve sign-in, approve the number in the Authenticator app.");
+        }
+        if ("Alive".equals(aroflo.state)) {
+            aroOutSince = 0;
+            Alerts.clear(this, "aroflo-limit");
+            Alerts.clear(this, "aroflo-out");
+            return;
+        }
+        if (aroOutSince == 0) aroOutSince = now;
+        if ("Session limit".equals(aroflo.state)) {
+            if (!aroWorkWaiting()) return;
+            if (quietHours()) {
+                if (now - lastAutoContinue > 20 * 60000) {
+                    lastAutoContinue = now;
+                    log("AroFlo: work waiting and it's after hours, pressing CONTINUE");
+                    pressOnAroFlo("CONTINUE");
+                }
+            } else {
+                Alerts.raise(this, "aroflo-limit", "TV: AroFlo work waiting, press Continue",
+                        "Something else signed into AroFlo as you, so the TV's AroFlo got bumped, and the filer has AroFlo work "
+                                + "waiting. Press Continue on the dashboard's TV remote when you're not using AroFlo (it logs out "
+                                + "your other AroFlo session). After hours the TV presses it itself.");
+            }
+        } else if (aroflo.state.startsWith("Sign-in failed") && now - aroOutSince > 10 * 60000) {
+            Alerts.raise(this, "aroflo-out", "TV: AroFlo sign-in failed on the TV",
+                    "The TV tried the saved AroFlo login twice and stopped so the account doesn't lock. Check the password, "
+                            + "or press Show on AroFlo on the TV to see what it says.");
+        }
+    }
+
+    /** AroFlo jobs the filer has queued but not done. Reading mail doesn't need AroFlo. */
+    private boolean aroWorkWaiting() {
+        if (store == null) return false;
+        try {
+            String jobs = store.getJson("wfJobs");
+            if (jobs == null) return false;
+            JSONArray a = new JSONArray(jobs);
+            for (int i = 0; i < a.length(); i++) {
+                JSONObject j = a.optJSONObject(i);
+                if (j != null && "new".equals(j.optString("status"))) return true;
+            }
+        } catch (Exception ignored) {
+        }
+        return false;
+    }
+
+    /** Weeknights 6pm to 6am and all weekend. */
+    static boolean quietHours() {
+        java.util.Calendar k = java.util.Calendar.getInstance();
+        int d = k.get(java.util.Calendar.DAY_OF_WEEK), h = k.get(java.util.Calendar.HOUR_OF_DAY);
+        return d == java.util.Calendar.SATURDAY || d == java.util.Calendar.SUNDAY || h < 6 || h >= 18;
     }
 
     /** Auto run: close once the filer's had time to look and has nothing going, or give up after 12 min. */
@@ -1378,6 +1450,7 @@ public class FilerActivity extends Activity {
     }
 
     void remoteReload() {
+        clearTabLocks(); // the old pages' "working" locks would hold the new ones up for a minute or two
         restartSession(outlook, "reload from the TV remote task");
         restartSession(aroflo, "reload from the TV remote task");
     }
