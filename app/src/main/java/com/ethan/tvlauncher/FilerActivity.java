@@ -851,9 +851,27 @@ public class FilerActivity extends Activity {
     }
 
     /** Presses a button on AroFlo's screen by its text (sent from AirHQ). */
-    boolean pressOnAroFlo(String label) {
+    boolean pressOnAroFlo(final String label) {
         log("AroFlo: asked to press " + label);
-        return sendToAroFlo("press", "label", label);
+        if (!running || aroflo == null || aroflo.view == null) return false;
+        if (showing == aroflo) return sendToAroFlo("press", "label", label);
+        // 19/11: a tap on the hidden page never landed (nothing draws it, so the page can't tell where the tap is).
+        // Bring AroFlo on screen, let it lay out at TV size, press, then put it away again.
+        showSession(aroflo);
+        handler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                if (!running) return;
+                sendToAroFlo("press", "label", label);
+                handler.postDelayed(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (running && showing == aroflo) hideSession();
+                    }
+                }, 6000);
+            }
+        }, 1500);
+        return true;
     }
 
     private boolean sendToAroFlo(String kind, String key, String value) {
