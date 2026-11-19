@@ -45,7 +45,7 @@ This repo is **public**: never put logins, PINs, tokens, IP addresses or the bus
 
 ## How the pieces fit
 - `MainActivity`: home screen (clock, Filer, Updates, All apps, Settings, favourite app tiles). `Ui`: shared views.
-- `FilerActivity`: two hidden WebViews (Outlook and AroFlo) laid out at PC size (1600x1000) behind a dimmed,
+- `FilerActivity`: two hidden WebViews (Outlook and AroFlo) laid out at 1600x1000 pixels behind a dimmed,
   drifting Filer screen. Injects `gm-shim.js` (fakes Tampermonkey's GM_ API, storage in `GmStore`, HTTP in `Http`)
   wrapped around the filer script from ec-userscripts main (cached in filesDir, the new copy is used from the next
   open). `probe.js` reads each page's state every 8 s and fills the saved logins. Taps are real MotionEvents
@@ -53,6 +53,8 @@ This repo is **public**: never put logins, PINs, tokens, IP addresses or the bus
   check) close themselves after about a minute of nothing to do and put the TV back to sleep if it was off.
 - `RunnerActivity` (build 37 on): runs Ethan's other scripts on the TV, one job at a time, then goes back to how the TV
   was (Filer reopened, asleep again, or home). Never takes the TV off HDMI or another app.
+  - The TV's pixel ratio is 2, so the Runner sizes its page at 1600x1000 times the density (true PC width, 20/11).
+    The Filer's pages are still 1600x1000 pixels, which Outlook sees as 800x500 (folder list folded).
   - Inbox pull: the EC Inbox Pull script (ec-userscripts src, cached in filesDir) in a hidden PC-size Outlook page with
     `#ec-inbox-run=<day>`, read only, unread put back. Days: today and the 6 before, like the dashboard. Then
     `assets/runner-af.js` (loaded from GitHub main each run, so a push to it is live without a build; the built-in

@@ -758,8 +758,11 @@ public class RunnerActivity extends Activity {
         });
         w.setFocusable(false);
         web = w;
-        // PC size behind the cover, like the Filer (Outlook squashes its reading pane at TV width)
-        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(1600, 1000);
+        // PC size behind the cover. 20/11: the TV doubles everything (pixel ratio 2), so 1600 x 1000 pixels was only
+        // 800 x 500 to Outlook: folder list folded away and a missed day couldn't scroll back (Wed 18/11 came back empty).
+        // Sized by the screen density now, so the page really is 1600 x 1000.
+        float dens = getResources().getDisplayMetrics().density;
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(Math.round(1600 * dens), Math.round(1000 * dens));
         webHolder.addView(w, 0, lp);
         w.loadUrl(url);
     }
