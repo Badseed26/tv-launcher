@@ -534,6 +534,7 @@ public class RunnerActivity extends Activity {
             if ("lookup".equals(job.kind)) {
                 j.put("kind", "lookup");
                 j.put("terms", new JSONArray(job.terms));
+                j.put("id", token + started);
             } else {
                 j.put("kind", "cal");
                 j.put("weeks", 5);
@@ -710,6 +711,12 @@ public class RunnerActivity extends Activity {
         }
         w.setWebChromeClient(new WebChromeClient());
         w.setWebViewClient(new WebViewClient() {
+            @Override
+            public void onPageStarted(WebView view, String u, Bitmap favicon) {
+                // a notes lookup moves on to each task page: run the script again on each one
+                if (view == web && job != null && "lookup".equals(job.kind)) pageRan = false;
+            }
+
             @Override
             public void onPageFinished(WebView view, String u) {
                 if (view != web || job == null || pageWant == null || bundle == null && !"lookup".equals(job.kind)) return;

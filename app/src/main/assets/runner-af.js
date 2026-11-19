@@ -62,32 +62,50 @@
       return done({ ok: true, visits: lines.length, from: from.getDate() + '/' + (from.getMonth() + 1), weeks: weeks, lines: lines });
     }
     if (JOB.kind == 'lookup') {
-      var out = [];
-      for (var q = 0; q < JOB.terms.length && q < 25; q++) {
-        var term = JOB.terms[q], m;
-        try {
-          if ((m = term.match(/^notes?\s+(\d{4,5})$/i))) {
-            var r = (await search(m[1], 'JobNo')).find(function (x) { return x.jn == m[1]; });
-            if (!r || !r.href) { out.push('notes ' + m[1] + ': JN not found'); continue; }
-            var pg = new DOMParser().parseFromString(await (await fetch(r.href)).text(), 'text/html'), pt = txt(pg);
-            var a1 = pt.indexOf('Task Notes'), b1 = pt.indexOf('Add Note (Text)'), u = pt.indexOf('Upcoming Schedules');
-            var notes = a1 < 0 ? '' : pt.slice(a1, b1 > a1 ? b1 : a1 + 1500);
-            out.push('notes JN ' + r.jn + ' ' + r.task + ' (' + r.status + ')\n  ' + (u < 0 ? 'no upcoming schedules shown' : pt.slice(u, u + 200)) + '\n  ' + (notes ? notes.slice(-1500) : 'notes list not found on the page'));
-            continue;
-          }
-          var field = 'Location', s = term;
-          if ((m = term.match(/^(jn|job)\s*(\d{4,5})$/i)) || (m = term.match(/^()(\d{4,5})$/))) { field = 'JobNo'; s = m[2]; }
-          else if ((m = term.match(/^(po|claim|order)\s+(.+)$/i))) { field = 'CustOn'; s = m[2]; }
-          else if ((m = term.match(/^client\s+(.+)$/i))) { field = 'Client'; s = m[1]; }
-          else if ((m = term.match(/^desc\s+(.+)$/i))) { field = 'Desc'; s = m[1]; }
-          else if ((m = term.match(/^(street|address|addr)\s+(.+)$/i))) { field = 'Location'; s = m[2]; }
-          else if (/\d{6,}/.test(term) && !/\s/.test(term)) field = 'CustOn';
-          var res = await search(s, field);
-          if (field == 'JobNo') res = res.filter(function (x) { return x.jn == s; });
-          out.push(field + ' "' + s + '": ' + (res.length ? res.length + ' found' : 'nothing found') + res.slice(0, 12).map(function (x) { return '\n  JN ' + x.jn + ' | ' + x.task + ' | ' + x.status + (x.req ? ' | ' + x.req : ''); }).join(''));
-        } catch (e) { out.push(term + ': failed, ' + String(e && e.message || e).slice(0, 80)); }
+      // 20/11: a task's notes load after the page opens, so notes lookups open each task page in turn and read it once
+      // it's drawn (like the filer). Progress waits in sessionStorage between pages.
+      var st = null; try { st = JSON.parse(sessionStorage.getItem('_runLook') || 'null'); } catch (e) {}
+      if (!st || st.id != JOB.id) {
+        var out = [], queue = [];
+        for (var q = 0; q < JOB.terms.length && q < 25; q++) {
+          var term = JOB.terms[q], m;
+          try {
+            if ((m = term.match(/^notes?\s+(\d{4,5})$/i))) { queue.push(m[1]); out.push('@notes ' + m[1]); continue; }
+            var field = 'Location', s = term;
+            if ((m = term.match(/^(jn|job)\s*(\d{4,5})$/i)) || (m = term.match(/^()(\d{4,5})$/))) { field = 'JobNo'; s = m[2]; }
+            else if ((m = term.match(/^(po|claim|order)\s+(.+)$/i))) { field = 'CustOn'; s = m[2]; }
+            else if ((m = term.match(/^client\s+(.+)$/i))) { field = 'Client'; s = m[1]; }
+            else if ((m = term.match(/^desc\s+(.+)$/i))) { field = 'Desc'; s = m[1]; }
+            else if ((m = term.match(/^(street|address|addr)\s+(.+)$/i))) { field = 'Location'; s = m[2]; }
+            else if (/\d{6,}/.test(term) && !/\s/.test(term)) field = 'CustOn';
+            var res = await search(s, field);
+            if (field == 'JobNo') res = res.filter(function (x) { return x.jn == s; });
+            out.push(field + ' "' + s + '": ' + (res.length ? res.length + ' found' : 'nothing found') + res.slice(0, 12).map(function (x) { return '\n  JN ' + x.jn + ' | ' + x.task + ' | ' + x.status + (x.req ? ' | ' + x.req : ''); }).join(''));
+          } catch (e) { out.push(term + ': failed, ' + String(e && e.message || e).slice(0, 80)); }
+        }
+        st = { id: JOB.id, out: out, queue: queue, cur: null };
       }
-      return done({ ok: true, text: out.join('\n') });
+      var save = function () { sessionStorage.setItem('_runLook', JSON.stringify(st)); };
+      var put = function (jn, text) { var i = st.out.indexOf('@notes ' + jn); if (i >= 0) st.out[i] = text; else st.out.push(text); };
+      // on the task page we were heading for: read it
+      if (st.cur && new RegExp('\\bJN ' + st.cur + '\\b').test(document.title)) {
+        for (var k = 0; k < 40 && txt(document).indexOf('Add Note (Text)') < 0; k++) await sleep(400);
+        await sleep(1500);
+        var pt = txt(document), a1 = pt.indexOf('Task Notes'), b1 = pt.indexOf('Add Note (Text)'), u = pt.indexOf('Upcoming Schedules');
+        var notes = a1 < 0 ? '' : pt.slice(a1 + 10, b1 > a1 ? b1 : a1 + 1500).trim();
+        put(st.cur, 'notes JN ' + st.cur + ' ' + document.title.replace(/ - Task - AroFlo.*$/, '').slice(0, 70) + '\n  ' + (u < 0 ? 'no upcoming schedules' : pt.slice(u, u + 220).replace(/View Schedule/g, '').replace(/\s+All Task Schedules.*$/, '')) + '\n  Notes: ' + (notes ? notes.slice(-1800) : 'none found on the page'));
+        st.cur = null;
+      } else if (st.cur) { put(st.cur, 'notes JN ' + st.cur + ': the task page didn\'t open'); st.cur = null; }
+      while (st.queue.length) {
+        var jn = st.queue.shift(), r = null;
+        try { r = (await search(jn, 'JobNo')).find(function (x) { return x.jn == jn; }); } catch (e) {}
+        if (!r || !r.href) { put(jn, 'notes ' + jn + ': JN not found'); continue; }
+        st.cur = jn; save();
+        location.href = r.href; // the app runs this again once the task page loads
+        return;
+      }
+      sessionStorage.removeItem('_runLook');
+      return done({ ok: true, text: st.out.join('\n') });
     }
     done({ err: 'unknown job' });
   } catch (e) { done({ err: 'script error: ' + String(e && e.message || e).slice(0, 120) }); }
