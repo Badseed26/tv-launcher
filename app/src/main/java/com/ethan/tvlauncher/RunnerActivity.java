@@ -421,14 +421,8 @@ public class RunnerActivity extends Activity {
                     JSONObject o = new JSONObject(bj);
                     if (o.optLong("at") >= started - 5000 && !o.optString("text").isEmpty()) {
                         bundle = o.optString("text");
-                        say("Pull done: " + (pullLine == null ? "" : pullLine), pullLine != null && pullLine.startsWith("⚠") ? WARN : GOOD);
-                        stopPage();
-                        handler.postDelayed(new Runnable() {
-                            @Override
-                            public void run() {
-                                openAroFlo(CAL_URL);
-                            }
-                        }, 1500);
+                        // the pull writes its last status just after the bundle: give it a moment, then go by the bundle
+                        handler.postDelayed(afterPull, 1500);
                         return;
                     }
                 }
@@ -442,6 +436,55 @@ public class RunnerActivity extends Activity {
             handler.postDelayed(this, 2000);
         }
     };
+
+    private static final String OUTLOOK_DIAG = "(function(){try{return JSON.stringify({w:innerWidth,h:innerHeight,dpr:devicePixelRatio,"
+            + "path:location.pathname,rows:document.querySelectorAll('div[role=option][data-convid]').length,"
+            + "tree:[].slice.call(document.querySelectorAll('[role=treeitem]')).slice(0,6).map(function(t){return (t.getAttribute('title')||t.textContent||'').slice(0,30);}),"
+            + "btns:[].slice.call(document.querySelectorAll('button[aria-label]')).map(function(b){return b.getAttribute('aria-label');})"
+            + ".filter(function(l){return /pane|navig|folder|menu|expand|collapse/i.test(l);}).slice(0,10)});}catch(e){return 'diag failed '+e;}})()";
+
+    /** Bundle's in. If the pull hit a problem, note what Outlook looked like on the TV, then on to the calendar. */
+    private final Runnable afterPull = new Runnable() {
+        @Override
+        public void run() {
+            if (!alive || job == null) return;
+            try {
+                String st = store.getJson("ecStatus");
+                if (st != null) {
+                    JSONObject o = new JSONObject(st);
+                    if (o.optLong("at") >= started) pullLine = o.optString("t");
+                }
+            } catch (Exception ignored) {
+            }
+            java.util.regex.Matcher pm = java.util.regex.Pattern.compile("(?m)^!! PROBLEM: (.*)$").matcher(bundle);
+            final boolean problem = pm.find();
+            if (problem && (pullLine == null || !pullLine.contains("Problem"))) pullLine = "\u26A0 Problem: " + pm.group(1);
+            say("Pull done: " + (pullLine == null ? "" : pullLine), problem ? WARN : GOOD);
+            if (problem && web != null) {
+                web.evaluateJavascript(OUTLOOK_DIAG, new android.webkit.ValueCallback<String>() {
+                    @Override
+                    public void onReceiveValue(String v) {
+                        bundle = bundle + "\n\nOutlook on the TV when it stopped: " + v + "\n";
+                        TvLog.line(RunnerActivity.this, "Runner: Outlook diag " + v);
+                        pullLine = pullLine + " (Outlook diag in the bundle)";
+                        toCalendar();
+                    }
+                });
+            } else {
+                toCalendar();
+            }
+        }
+    };
+
+    private void toCalendar() {
+        stopPage();
+        handler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                if (alive && job != null) openAroFlo(CAL_URL);
+            }
+        }, 1500);
+    }
 
     private void openAroFlo(String url) {
         setNow(url.equals(CAL_URL) ? "Reading the AroFlo calendar..." : "Opening AroFlo...");

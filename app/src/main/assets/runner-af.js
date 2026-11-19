@@ -40,11 +40,14 @@
       var from = new Date(); from.setHours(0, 0, 0, 0);
       var back = JOB.back || 0; from = new Date(from.getTime() - back * 864e5);
       var weeks = JOB.weeks || 5;
+      // 20/11: wait for each week's view to be on screen and its bookings to stop changing (a quick read missed a week)
+      var viewHas = function (d) { try { var v = $c.fullCalendar('getView'); return new Date(+v.start) <= d && d < new Date(+v.end); } catch (e) { return true; } };
       for (var w = 0; w < weeks; w++) {
-        var d = new Date(from.getTime() + w * 7 * 864e5), hd = document.querySelector('.fc-header-title'), h0 = hd ? hd.innerText : '';
+        var d = new Date(from.getTime() + w * 7 * 864e5);
         $c.fullCalendar('gotoDate', d);
-        for (var n = 0; n < 40; n++) { await sleep(250); var h1 = document.querySelector('.fc-header-title'); if (((h1 && h1.innerText) != h0 || w == 0) && fc().some(function (e) { return new Date(e.start) >= d; })) break; }
-        await sleep(600); grab();
+        var last = -1, same = 0;
+        for (var n = 0; n < 30 && same < 3; n++) { await sleep(400); var c = fc().length; if (viewHas(d) && c == last && c > 0) same++; else same = 0; last = c; }
+        grab();
       }
       var DN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
       var tm = function (x) { if (!x) return '?'; var h = x.getHours(), m = x.getMinutes(); return (h % 12 || 12) + ':' + (m < 10 ? '0' : '') + m + (h < 12 ? 'am' : 'pm'); };
