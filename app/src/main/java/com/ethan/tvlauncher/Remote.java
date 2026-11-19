@@ -23,7 +23,7 @@ final class Remote {
 
     static final String TASK = "6j3H69pvQ9hQ86pX";
     private static final long EVERY_MS = 20000;
-    private static final String HELP = "Commands: wake, open filer, close filer, status, log, reload, press <button text>, code <number>, stay awake on, stay awake off, update, check mail, test mail check, mail check on, mail check off, mail check opens on, mail check opens off";
+    private static final String HELP = "Commands: wake, open filer, close filer, status, log, reload, press <button text>, code <number>, stay awake on, stay awake off, update, web remote, web remote new pin, check mail, test mail check, mail check on, mail check off, mail check opens on, mail check opens off";
 
     private static Remote inst;
 
@@ -177,6 +177,14 @@ final class Remote {
                     // Try 2: a screen that asks Android to switch the TV on as it opens
                     if (!screenOn) WakeActivity.start(c, false);
                     reply = screenOn ? "TV was already on." : "Turning the TV on. Send status in a few seconds to check.";
+                } else if (lc.equals("web remote") || lc.equals("web remote new pin")) {
+                    String pin = lc.endsWith("new pin") ? RemoteServer.newPin(c) : RemoteServer.pin(c);
+                    String ip = RemoteServer.tailscaleIp();
+                    reply = ip == null
+                            ? "Tailscale isn't connected on the TV, so the phone page can't be reached. Open Tailscale on the TV and check it's on."
+                            : "Phone remote: open http://" + ip + ":" + RemoteServer.PORT + " on your phone (Tailscale on), PIN " + pin
+                            + (lc.endsWith("new pin") ? ". New PIN, any phone that was logged in has to log in again." : ".")
+                            + " In Safari, Share > Add to Home Screen to make it an app.";
                 } else if (lc.equals("update") || lc.equals("update tv")) {
                     Updater.remoteUpdate(c, new Say() {
                         @Override

@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="TV Filer"><meta name="theme-color" content="#0b0f17">
+<title>TV Filer</title>
+<style>
+:root{color-scheme:dark;--bg:#0b0f17;--card:rgba(255,255,255,.05);--line:rgba(255,255,255,.09);--text:#e8ecf4;--mute:#93a0b8;--blue:#6f8cff;--violet:#8a5bff;--good:#3ddc97;--warn:#ffc35a;--bad:#ff7a7a}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:radial-gradient(1000px 500px at 10% -15%,#1d2b55 0,transparent 60%),radial-gradient(800px 420px at 110% 0,#3a1f5c 0,transparent 55%),var(--bg);color:var(--text);font:15px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;padding:calc(env(safe-area-inset-top) + 12px) 12px calc(env(safe-area-inset-bottom) + 16px);min-height:100vh}
+header{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+h1{margin:0;font-size:19px;font-weight:650;letter-spacing:-.01em}
+.chips{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.chip{font-size:12px;padding:4px 9px;border-radius:999px;background:var(--card);border:1px solid var(--line);color:var(--mute);white-space:nowrap}
+.chip b{font-weight:600}
+.chip.good b{color:var(--good)}.chip.warn b{color:var(--warn)}.chip.bad b{color:var(--bad)}
+.note{font-size:13px;color:var(--mute);margin:0 2px 10px;min-height:18px}
+.seg{display:flex;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:4px;gap:4px;margin-bottom:10px}
+.seg button{flex:1;border:0;background:transparent;color:var(--mute);padding:10px 0;border-radius:10px;font-size:15px;font-weight:600}
+.seg button.on{background:linear-gradient(135deg,var(--blue),var(--violet));color:#fff}
+.screen{position:relative;border-radius:14px;overflow:hidden;background:#000;border:1px solid var(--line);aspect-ratio:16/9;display:grid;place-items:center;touch-action:manipulation}
+.screen img{width:100%;height:100%;object-fit:fill;display:block}
+.screen .msg{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:20px;color:var(--mute);font-size:14px;background:rgba(11,15,23,.85)}
+.dot{position:absolute;width:26px;height:26px;margin:-13px 0 0 -13px;border-radius:50%;border:2px solid #fff;pointer-events:none;animation:ping .6s ease-out forwards}
+@keyframes ping{from{transform:scale(.4);opacity:1}to{transform:scale(1.6);opacity:0}}
+.row{display:flex;gap:8px;margin-top:10px}
+.row>*{flex:1}
+.btn{border:1px solid var(--line);background:var(--card);color:var(--text);padding:12px 6px;border-radius:12px;font-size:14px;font-weight:600}
+.btn:active{transform:scale(.97)}
+.btn.primary{border:0;background:linear-gradient(135deg,var(--blue),var(--violet));color:#fff}
+input{min-width:0;border:1px solid var(--line);background:rgba(0,0,0,.25);color:#fff;padding:12px;border-radius:12px;font-size:16px;outline:none}
+input:focus{border-color:var(--blue)}
+h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--mute);margin:18px 2px 0;font-weight:600}
+.small{font-size:12px;color:var(--mute);margin:8px 2px 0}
+</style></head><body>
+<header><h1>TV Filer</h1><div class="chips" id="chips"></div></header>
+<div class="note" id="note"></div>
+
+<div class="seg"><button data-s="outlook">Outlook</button><button data-s="aroflo">AroFlo</button><button data-s="">Filer screen</button></div>
+<div class="screen" id="screen"><img id="img" alt=""><div class="msg" id="msg">Pick Outlook or AroFlo to see it</div></div>
+
+<div class="row"><button class="btn" data-k="back">Back</button><button class="btn" data-scroll="-500">Scroll up</button><button class="btn" data-scroll="500">Scroll down</button><button class="btn" data-k="reload">Reload page</button></div>
+<div class="row"><button class="btn" data-k="enter">Enter</button><button class="btn" data-k="tab">Tab</button><button class="btn" data-k="backspace">Delete</button><button class="btn" data-k="escape">Esc</button></div>
+<div class="row"><input id="text" placeholder="Type into the selected box" autocomplete="off" autocapitalize="off"><button class="btn primary" id="send" style="flex:0 0 76px">Type</button></div>
+<div class="row"><input id="code" placeholder="AroFlo code" inputmode="numeric" autocomplete="one-time-code"><button class="btn primary" id="sendcode" style="flex:0 0 76px">Send</button></div>
+
+<h2>Filer</h2>
+<div class="row"><button class="btn" data-c="open">Open Filer</button><button class="btn" data-c="close">Close Filer</button><button class="btn" data-c="reload">Reload both</button></div>
+<div class="row"><button class="btn" data-c="check">Check mail</button><button class="btn" data-c="update">Update TV</button></div>
+<p class="small">Tap the picture to tap the TV. The page you're looking at shows on the TV while you use it and goes back behind the Filer screen 2 min after you stop.</p>
+
+<script>
+var S={which:'',st:{},busy:false,last:0};
+var $=function(id){return document.getElementById(id);};
+function post(url,data){
+  var b=new URLSearchParams(data||{});
+  return fetch(url,{method:'POST',body:b,headers:{'Content-Type':'application/x-www-form-urlencoded'}}).then(function(r){if(r.status==401){location.reload();throw 0;}return r.json().catch(function(){return {};});});
+}
+function chip(label,val){
+  var cls=/^Alive/.test(val)?'good':/Signing|Loading|Starting/.test(val)?'warn':val?'bad':'';
+  return '<span class="chip '+cls+'">'+label+' <b>'+(val||'-')+'</b></span>';
+}
+function status(){
+  fetch('/api/status',{cache:'no-store'}).then(function(r){if(r.status==401){location.reload();throw 0;}return r.json();}).then(function(o){
+    S.st=o;
+    $('chips').innerHTML=(o.filer?chip('Outlook',o.outlook)+chip('AroFlo',o.aroflo):'<span class="chip bad"><b>Filer closed</b></span>')+'<span class="chip">build <b>'+o.build+'</b></span>';
+    $('note').textContent=o.note||(o.check?'Last mail check '+o.check:'');
+    if(!o.filer){showMsg('The Filer\'s closed. Press Open Filer below.');}
+  }).catch(function(){});
+}
+function showMsg(t){$('msg').textContent=t;$('msg').hidden=false;}
+function pick(s){
+  S.which=s;
+  document.querySelectorAll('.seg button').forEach(function(b){b.classList.toggle('on',b.dataset.s===s);});
+  if(!s){post('/api/cmd',{c:'hide'});$('img').removeAttribute('src');showMsg('Showing the Filer screen on the TV');return;}
+  showMsg('Loading '+(s=='aroflo'?'AroFlo':'Outlook')+'...');
+  shot();
+}
+var timer=null;
+function shot(){
+  clearTimeout(timer);
+  if(!S.which||document.hidden)return;
+  var s=S.which;
+  fetch('/api/shot?s='+s+'&t='+Date.now(),{cache:'no-store'}).then(function(r){
+    if(r.status==401){location.reload();throw 0;}
+    if(!r.ok){showMsg(S.st.filer===false?'The Filer\'s closed. Press Open Filer below.':'No picture yet, trying again');return null;}
+    return r.blob();
+  }).then(function(b){
+    if(!b||s!==S.which)return;
+    var u=URL.createObjectURL(b),img=$('img'),old=img.src;
+    img.onload=function(){if(old&&old.indexOf('blob:')==0)URL.revokeObjectURL(old);};
+    img.src=u;$('msg').hidden=true;
+  }).catch(function(){}).then(function(){timer=setTimeout(shot,1200);});
+}
+$('img').addEventListener('click',function(e){
+  var r=this.getBoundingClientRect(),x=(e.clientX-r.left)/r.width,y=(e.clientY-r.top)/r.height;
+  var d=document.createElement('div');d.className='dot';d.style.left=(e.clientX-r.left)+'px';d.style.top=(e.clientY-r.top)+'px';$('screen').appendChild(d);setTimeout(function(){d.remove();},700);
+  post('/api/tap',{x:x.toFixed(4),y:y.toFixed(4)}).then(function(){setTimeout(shot,350);});
+});
+document.querySelectorAll('.seg button').forEach(function(b){b.onclick=function(){pick(b.dataset.s);};});
+document.querySelectorAll('[data-k]').forEach(function(b){b.onclick=function(){post('/api/key',{k:b.dataset.k}).then(function(){setTimeout(shot,300);});};});
+document.querySelectorAll('[data-scroll]').forEach(function(b){b.onclick=function(){post('/api/scroll',{dy:b.dataset.scroll}).then(function(){setTimeout(shot,300);});};});
+document.querySelectorAll('[data-c]').forEach(function(b){b.onclick=function(){
+  if(b.dataset.c=='close'&&!confirm('Close the Filer on the TV?'))return;
+  post('/api/cmd',{c:b.dataset.c}).then(function(){setTimeout(status,400);setTimeout(status,3000);});
+};});
+$('send').onclick=function(){var t=$('text').value;if(!t)return;post('/api/type',{text:t}).then(function(){$('text').value='';setTimeout(shot,300);});};
+$('text').addEventListener('keydown',function(e){if(e.key=='Enter'){e.preventDefault();$('send').onclick();}});
+$('sendcode').onclick=function(){var t=$('code').value.replace(/\D/g,'');if(!t)return;post('/api/code',{code:t}).then(function(){$('code').value='';setTimeout(shot,800);setTimeout(status,2000);});};
+document.addEventListener('visibilitychange',function(){if(!document.hidden){status();shot();}});
+status();setInterval(function(){if(!document.hidden)status();},3000);
+</script>
+</body></html>

@@ -508,6 +508,10 @@ public class FilerActivity extends Activity {
             renderLog();
             if (auto) checkAutoDone();
             watchSignIns();
+            if (webUntil > 0 && System.currentTimeMillis() > webUntil) {
+                webUntil = 0;
+                if (showing != null) hideSession(); // the phone stopped looking
+            }
             handler.postDelayed(this, TICK_MS);
         }
     };
@@ -1453,6 +1457,148 @@ public class FilerActivity extends Activity {
         clearTabLocks(); // the old pages' "working" locks would hold the new ones up for a minute or two
         restartSession(outlook, "reload from the TV remote task");
         restartSession(aroflo, "reload from the TV remote task");
+    }
+
+    // ---------------------------------------------------------------- the phone remote page (RemoteServer), main thread
+
+    interface Shot {
+        void done(byte[] jpg);
+    }
+
+    private long webUntil;
+
+    private Session webSession(String which) {
+        return "aroflo".equals(which) ? aroflo : outlook;
+    }
+
+    /** Puts that page on the TV for the phone. It goes back behind the Filer screen 2 min after the phone stops looking. */
+    boolean webShow(String which) {
+        Session s = webSession(which);
+        if (!running || s == null || s.view == null) return false;
+        webUntil = System.currentTimeMillis() + 120000;
+        if (showing != s) {
+            showSession(s);
+            log(s.name + ": opened from the phone remote");
+        }
+        return true;
+    }
+
+    String webWhich() {
+        return showing == aroflo ? "aroflo" : showing == outlook ? "outlook" : "";
+    }
+
+    String webState(String which) {
+        Session s = webSession(which);
+        return s == null ? "" : s.state;
+    }
+
+    void webHide() {
+        webUntil = 0;
+        if (showing != null) hideSession();
+    }
+
+    /** What's on the TV right now (the shown page), as a JPEG about 1000 wide. */
+    void webShot(final Shot cb) {
+        final View root = getWindow().getDecorView();
+        final int w = root.getWidth(), h = root.getHeight();
+        if (Build.VERSION.SDK_INT < 26 || w == 0 || h == 0) {
+            cb.done(null);
+            return;
+        }
+        final Bitmap full = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+        android.view.PixelCopy.request(getWindow(), full, new android.view.PixelCopy.OnPixelCopyFinishedListener() {
+            @Override
+            public void onPixelCopyFinished(int result) {
+                if (result != android.view.PixelCopy.SUCCESS) {
+                    full.recycle();
+                    cb.done(null);
+                    return;
+                }
+                int tw = Math.min(1000, w), th = Math.round(h * (tw / (float) w));
+                Bitmap small = Bitmap.createScaledBitmap(full, tw, th, true);
+                full.recycle();
+                java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+                small.compress(Bitmap.CompressFormat.JPEG, 70, out);
+                small.recycle();
+                cb.done(out.toByteArray());
+            }
+        }, handler);
+    }
+
+    /** A real tap at fx, fy (0 to 1 across the screen) on the page that's showing. */
+    boolean webTap(float fx, float fy) {
+        final Session s = showing;
+        if (s == null || s.view == null || s.view.getWidth() == 0) return false;
+        webUntil = System.currentTimeMillis() + 120000;
+        int[] at = new int[2];
+        s.view.getLocationInWindow(at);
+        View root = getWindow().getDecorView();
+        float x = fx * root.getWidth() - at[0], y = fy * root.getHeight() - at[1];
+        long down = SystemClock.uptimeMillis();
+        MotionEvent d = MotionEvent.obtain(down, down, MotionEvent.ACTION_DOWN, x, y, 0);
+        d.setSource(InputDevice.SOURCE_TOUCHSCREEN);
+        s.view.dispatchTouchEvent(d);
+        d.recycle();
+        MotionEvent u = MotionEvent.obtain(down, down + 60, MotionEvent.ACTION_UP, x, y, 0);
+        u.setSource(InputDevice.SOURCE_TOUCHSCREEN);
+        s.view.dispatchTouchEvent(u);
+        u.recycle();
+        return true;
+    }
+
+    /** Types into whatever box has focus on the showing page, as key presses. */
+    boolean webType(String text) {
+        Session s = showing;
+        if (s == null || s.view == null || text == null) return false;
+        webUntil = System.currentTimeMillis() + 120000;
+        KeyEvent[] evs = android.view.KeyCharacterMap.load(android.view.KeyCharacterMap.VIRTUAL_KEYBOARD).getEvents(text.toCharArray());
+        if (evs == null) {
+            // something the key map can't do (emoji and the like): put it in with the page's own insert
+            s.view.evaluateJavascript("document.execCommand('insertText',false," + JSONObject.quote(text) + ")", null);
+            return true;
+        }
+        for (KeyEvent e : evs) s.view.dispatchKeyEvent(e);
+        return true;
+    }
+
+    boolean webKey(String k) {
+        Session s = showing;
+        if (s == null || s.view == null) return false;
+        webUntil = System.currentTimeMillis() + 120000;
+        if ("back".equals(k)) {
+            if (s.view.canGoBack()) s.view.goBack();
+            return true;
+        }
+        if ("reload".equals(k)) {
+            s.view.reload();
+            return true;
+        }
+        int code;
+        switch (k) {
+            case "enter": code = KeyEvent.KEYCODE_ENTER; break;
+            case "tab": code = KeyEvent.KEYCODE_TAB; break;
+            case "backspace": code = KeyEvent.KEYCODE_DEL; break;
+            case "escape": code = KeyEvent.KEYCODE_ESCAPE; break;
+            case "up": code = KeyEvent.KEYCODE_DPAD_UP; break;
+            case "down": code = KeyEvent.KEYCODE_DPAD_DOWN; break;
+            case "left": code = KeyEvent.KEYCODE_DPAD_LEFT; break;
+            case "right": code = KeyEvent.KEYCODE_DPAD_RIGHT; break;
+            default: return false;
+        }
+        s.view.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, code));
+        s.view.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, code));
+        return true;
+    }
+
+    /** Scrolls whatever's under the middle of the page (Outlook's lists scroll inside boxes, not the page). */
+    boolean webScroll(int dy) {
+        Session s = showing;
+        if (s == null || s.view == null) return false;
+        webUntil = System.currentTimeMillis() + 120000;
+        s.view.evaluateJavascript("(function(){var e=document.elementFromPoint(innerWidth/2,innerHeight/2);"
+                + "while(e&&!(e.scrollHeight>e.clientHeight+5&&/auto|scroll/.test(getComputedStyle(e).overflowY)))e=e.parentElement;"
+                + "(e||document.scrollingElement).scrollBy(0," + dy + ");})()", null);
+        return true;
     }
 
     void remoteLog(String msg) {

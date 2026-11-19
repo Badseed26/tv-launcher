@@ -75,6 +75,7 @@ public class ListenService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        RemoteServer.start(this); // the phone remote page, over Tailscale
         HandlerThread t = new HandlerThread("listen-beat");
         t.start();
         bg = new Handler(t.getLooper());
