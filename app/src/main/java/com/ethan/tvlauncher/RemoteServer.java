@@ -313,7 +313,6 @@ final class RemoteServer {
             @Override
             public Object run(FilerActivity f) {
                 try {
-                    o.put("filer", true);
                     o.put("which", f.webWhich());
                     o.put("outlook", f.webState("outlook"));
                     o.put("aroflo", f.webState("aroflo"));
@@ -322,7 +321,8 @@ final class RemoteServer {
                 return true;
             }
         });
-        if (!o.has("filer")) o.put("filer", false);
+        // 20/11: open or closed comes straight from the Filer, so a busy moment on the TV can't make it flicker "closed"
+        o.put("filer", FilerActivity.instance != null);
         return o;
     }
 

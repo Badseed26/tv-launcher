@@ -69,6 +69,8 @@ function status(){
   fetch('/api/status',{cache:'no-store'}).then(function(r){if(r.status==401){location.reload();throw 0;}return r.json();}).then(function(o){
     if(S.build&&o.build&&o.build!=S.build){location.reload();return;}
     S.build=o.build;S.st=o;
+    if(o.filer&&o.outlook===undefined&&S.prev){o.outlook=S.prev.outlook;o.aroflo=S.prev.aroflo;o.which=S.prev.which;}
+    if(o.filer)S.prev=o;
     $('chips').innerHTML='<span class="chip">TV <b>'+(o.on||'-')+'</b></span>'+(o.filer?chip('Outlook',o.outlook)+chip('AroFlo',o.aroflo):'<span class="chip"><b>Filer closed</b></span>')+'<span class="chip">build <b>'+o.build+'</b></span>';
     $('seg').hidden=!o.filer;$('pagectl').hidden=!o.filer;
     if(o.filer){document.querySelectorAll('.seg button').forEach(function(b){b.classList.toggle('on',b.dataset.s===(o.which||''));});}
