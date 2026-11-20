@@ -61,6 +61,8 @@ public class HomeButtonService extends AccessibilityService {
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
+        // Phone remote (20/11): note which app came to the front, its package name only. Nothing from inside it.
+        if (event != null && event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) Screen.saw(this, event.getPackageName());
         // Only while a remote update is going: press Install on the system prompt for our own app, nothing else.
         if (System.currentTimeMillis() > Updater.autoConfirmUntil || event == null) return;
         CharSequence pkg = event.getPackageName();

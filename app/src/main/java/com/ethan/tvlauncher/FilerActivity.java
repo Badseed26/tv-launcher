@@ -209,6 +209,18 @@ public class FilerActivity extends Activity {
     }
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        Screen.on(this); // phone remote picture (20/11)
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        Screen.off(this);
+    }
+
+    @Override
     protected void onStop() {
         super.onStop();
         // Closed, Home pressed, another app opened or the TV switched off: shut it all down.

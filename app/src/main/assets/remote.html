@@ -21,6 +21,7 @@ h1{margin:0;font-size:19px;font-weight:650;letter-spacing:-.01em}
 .screen{position:relative;border-radius:14px;overflow:hidden;background:#000;border:1px solid var(--line);aspect-ratio:16/9;display:grid;place-items:center;touch-action:manipulation}
 .screen img{width:100%;height:100%;object-fit:fill;display:block}
 .screen .msg{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:20px;color:var(--mute);font-size:14px;background:rgba(11,15,23,.85)}
+.screen .msg.app{color:var(--text);font-size:17px;font-weight:600;background:radial-gradient(400px 200px at 50% 40%,rgba(111,140,255,.18),transparent 70%),#0b0f17}
 .dot{position:absolute;width:26px;height:26px;margin:-13px 0 0 -13px;border-radius:50%;border:2px solid #fff;pointer-events:none;animation:ping .6s ease-out forwards}
 @keyframes ping{from{transform:scale(.4);opacity:1}to{transform:scale(1.6);opacity:0}}
 .row{display:flex;gap:8px;margin-top:10px}
@@ -37,13 +38,13 @@ h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--mute
 <header><h1>TV Filer</h1><div class="chips" id="chips"></div></header>
 <div class="note" id="note"></div>
 
-<div class="seg"><button data-s="outlook">Outlook</button><button data-s="aroflo">AroFlo</button><button data-s="">Filer screen</button></div>
+<div class="seg" id="seg"><button data-s="outlook">Outlook</button><button data-s="aroflo">AroFlo</button><button data-s="">Filer screen</button></div>
 <div class="screen" id="screen"><img id="img" alt=""><div class="msg" id="msg">Loading...</div></div>
 
-<div class="row"><button class="btn" data-k="back">Back</button><button class="btn" data-scroll="-500">Scroll up</button><button class="btn" data-scroll="500">Scroll down</button><button class="btn" data-k="reload">Reload page</button></div>
+<div id="pagectl"><div class="row"><button class="btn" data-k="back">Back</button><button class="btn" data-scroll="-500">Scroll up</button><button class="btn" data-scroll="500">Scroll down</button><button class="btn" data-k="reload">Reload page</button></div>
 <div class="row"><button class="btn" data-k="enter">Enter</button><button class="btn" data-k="tab">Tab</button><button class="btn" data-k="backspace">Delete</button><button class="btn" data-k="escape">Esc</button></div>
 <div class="row"><input id="text" placeholder="Type into the selected box" autocomplete="off" autocapitalize="off"><button class="btn primary" id="send" style="flex:0 0 76px">Type</button></div>
-<div class="row"><input id="code" placeholder="AroFlo code" inputmode="numeric" autocomplete="one-time-code"><button class="btn primary" id="sendcode" style="flex:0 0 76px">Send</button></div>
+<div class="row"><input id="code" placeholder="AroFlo code" inputmode="numeric" autocomplete="one-time-code"><button class="btn primary" id="sendcode" style="flex:0 0 76px">Send</button></div></div>
 
 <h2>Filer</h2>
 <div class="row"><button class="btn" data-c="open">Open Filer</button><button class="btn" data-c="close">Close Filer</button><button class="btn" data-c="reload">Reload both</button></div>
@@ -51,7 +52,7 @@ h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--mute
 <h2>Runner</h2>
 <div class="row"><select id="day"></select><button class="btn primary" id="pull" style="flex:0 0 110px">Pull inbox</button></div>
 <p class="small" id="runner">Reads the day's Inbox and Sent Items (read only, unread put back) plus the next 5 weeks of AroFlo bookings, and drops the bundle on the TV remote task for the inbox check. The Filer closes while it runs and reopens after.</p>
-<p class="small">Tap the picture to tap the TV. The page you're looking at shows on the TV while you use it and goes back behind the Filer screen 2 min after you stop.</p>
+<p class="small">The picture is whatever the TV app has on screen (home screen, Filer or Runner). Any other app just shows its name. Taps only work on the Filer's Outlook and AroFlo pages, and the page you pick shows on the TV while you use it, going back behind the Filer screen 2 min after you stop.</p>
 
 <script>
 var S={which:null,st:{},gen:0};
@@ -67,14 +68,15 @@ function chip(label,val){
 function status(){
   fetch('/api/status',{cache:'no-store'}).then(function(r){if(r.status==401){location.reload();throw 0;}return r.json();}).then(function(o){
     S.st=o;
-    $('chips').innerHTML=(o.filer?chip('Outlook',o.outlook)+chip('AroFlo',o.aroflo):'<span class="chip bad"><b>Filer closed</b></span>')+'<span class="chip">build <b>'+o.build+'</b></span>';
+    $('chips').innerHTML='<span class="chip">TV <b>'+(o.on||'-')+'</b></span>'+(o.filer?chip('Outlook',o.outlook)+chip('AroFlo',o.aroflo):'<span class="chip"><b>Filer closed</b></span>')+'<span class="chip">build <b>'+o.build+'</b></span>';
+    $('seg').hidden=!o.filer;$('pagectl').hidden=!o.filer;
+    if(o.filer){document.querySelectorAll('.seg button').forEach(function(b){b.classList.toggle('on',b.dataset.s===(o.which||''));});}
     $('note').textContent=o.note||(o.check?'Last mail check '+o.check:'');
     if(o.days&&!$('day').options.length){$('day').innerHTML=o.days.map(function(d){return '<option value="'+d[0]+'">'+d[1]+'</option>';}).join('');}
     if(o.runner)$('runner').textContent='Runner: '+o.runner;
-    if(!o.filer){showMsg('The Filer\'s closed. Press Open Filer below.');}
   }).catch(function(){});
 }
-function showMsg(t){$('msg').textContent=t;$('msg').hidden=false;}
+function showMsg(t,app){$('msg').textContent=t;$('msg').classList.toggle('app',!!app);$('msg').hidden=false;}
 // 20/11: the TV shows whatever was picked last, and pictures never change that (a picture on its way used to put
 // AroFlo back up after you'd picked the Filer screen).
 function pick(s){
@@ -90,7 +92,7 @@ function shot(){
   var g=S.gen;
   fetch('/api/shot?t='+Date.now(),{cache:'no-store'}).then(function(r){
     if(r.status==401){location.reload();throw 0;}
-    if(!r.ok){return r.text().then(function(t){showMsg(S.st.filer===false?'The Filer\'s closed. Press Open Filer below.':(t||'No picture yet')+', trying again');return null;});}
+    if(!r.ok){return r.text().then(function(t){if(/^On the TV:|^The TV's off/.test(t||''))showMsg(t,true);else showMsg((t||'No picture yet')+', trying again');return null;});}
     return r.blob();
   }).then(function(b){
     if(!b||g!==S.gen)return;
@@ -100,6 +102,7 @@ function shot(){
   }).catch(function(){}).then(function(){timer=setTimeout(shot,1200);});
 }
 $('img').addEventListener('click',function(e){
+  if(S.st.on!=='Filer'||!S.st.which){$('note').textContent='Taps only work on the Filer\'s Outlook and AroFlo pages.';return;}
   var r=this.getBoundingClientRect(),x=(e.clientX-r.left)/r.width,y=(e.clientY-r.top)/r.height;
   var d=document.createElement('div');d.className='dot';d.style.left=(e.clientX-r.left)+'px';d.style.top=(e.clientY-r.top)+'px';$('screen').appendChild(d);setTimeout(function(){d.remove();},700);
   post('/api/tap',{x:x.toFixed(4),y:y.toFixed(4)}).then(function(){setTimeout(shot,350);});
@@ -117,6 +120,7 @@ $('text').addEventListener('keydown',function(e){if(e.key=='Enter'){e.preventDef
 $('sendcode').onclick=function(){var t=$('code').value.replace(/\D/g,'');if(!t)return;post('/api/code',{code:t}).then(function(){$('code').value='';setTimeout(shot,800);setTimeout(status,2000);});};
 document.addEventListener('visibilitychange',function(){if(!document.hidden){status();shot();}});
 status();setInterval(function(){if(!document.hidden)status();},3000);
-pick('');
+// 20/11: watch the TV from the start without changing what it shows
+S.which='';shot();
 </script>
 </body></html>

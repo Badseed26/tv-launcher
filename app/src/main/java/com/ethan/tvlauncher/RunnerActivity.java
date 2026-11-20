@@ -207,6 +207,18 @@ public class RunnerActivity extends Activity {
     }
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        Screen.on(this); // phone remote picture (20/11)
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        Screen.off(this);
+    }
+
+    @Override
     protected void onStop() {
         super.onStop();
         // Mid job: keep going in the background (stopping half way could leave Lisa's emails read), close when done.

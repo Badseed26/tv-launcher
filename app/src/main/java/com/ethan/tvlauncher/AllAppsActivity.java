@@ -71,7 +71,14 @@ public class AllAppsActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        Screen.on(this);
         build();
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        Screen.off(this);
     }
 
     private void build() {

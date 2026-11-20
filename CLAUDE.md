@@ -40,6 +40,10 @@ This repo is **public**: never put logins, PINs, tokens, IP addresses or the bus
    to get the address and PIN. Live picture of the Filer's Outlook or AroFlo page (PixelCopy, falls back to
    drawing the WebView), taps, typing, keys, scroll, AroFlo code, Filer buttons. The chosen page shows on the TV
    while it's being used and hides again 2 min after.
+   From 20/11 the picture is whatever the TV app has on screen at all times (home, all apps, Filer, Runner, and any
+   screen we add later, as long as it calls `Screen.on/off` in onResume/onPause). Any other app or HDMI only gets its
+   name in a text box, never a picture: HomeButtonService notes the front app's package name (nothing else) for that.
+   Taps still only work on the Filer's Outlook and AroFlo pages.
 3. **ADB** from AirHQ: `am broadcast` to SecretsReceiver (saves logins into the Keystore) and CodeReceiver (log,
    press, code). Both need the DUMP permission, so only the ADB shell can send them.
 

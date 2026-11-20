@@ -236,6 +236,7 @@ public class MainActivity extends Activity implements Ui.FocusListener {
         handler.post(tick);
 
         ListenService.start(this);
+        Screen.on(this);
         Updater.homeVisible = true;
         Updater.showPendingConfirm(this);
         Updater.maybeAutoCheck(this);
@@ -244,6 +245,7 @@ public class MainActivity extends Activity implements Ui.FocusListener {
     @Override
     protected void onPause() {
         super.onPause();
+        Screen.off(this);
         Updater.homeVisible = false;
         handler.removeCallbacks(tick);
     }

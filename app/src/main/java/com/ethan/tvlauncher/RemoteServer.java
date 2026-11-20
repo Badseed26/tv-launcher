@@ -287,6 +287,14 @@ final class RemoteServer {
         o.put("note", note);
         o.put("check", Peek.last);
         o.put("runner", RunnerActivity.instance != null ? RunnerActivity.state : "");
+        final AtomicReference<String> on = new AtomicReference<>("");
+        onMainAny(new Runnable() {
+            @Override
+            public void run() {
+                on.set(Screen.name(c));
+            }
+        });
+        o.put("on", on.get());
         JSONArray days = new JSONArray();
         for (String d : RunnerActivity.days()) days.put(new JSONArray().put(d).put(RunnerActivity.nice(d)));
         o.put("days", days);
@@ -309,40 +317,55 @@ final class RemoteServer {
         return o;
     }
 
-    /** A picture of whatever's on the TV's Filer right now (the page the phone picked, or the Filer screen). */
+    /**
+     * A picture of what's on the TV (20/11): any of our own screens (home, Filer, Runner, all apps). Another app or the
+     * TV being off gets a 409 with a line saying so, never a picture.
+     */
     private void shot(OutputStream out) throws Exception {
         final CountDownLatch done = new CountDownLatch(1);
         final AtomicReference<byte[]> img = new AtomicReference<>();
+        final AtomicReference<String> why = new AtomicReference<>();
         main.post(new Runnable() {
             @Override
             public void run() {
-                final FilerActivity f = FilerActivity.instance;
-                if (f == null) {
+                final android.app.Activity a = Screen.top;
+                if (a == null) {
+                    String n = Screen.name(c);
+                    why.set(n.equals("TV off") ? "The TV's off" : "On the TV: " + n);
                     done.countDown();
                     return;
                 }
-                f.webKeepAlive();
-                // a moment for the page to draw at TV size if it's only just been put on screen
-                main.postDelayed(new Runnable() {
+                final Screen.Shot cb = new Screen.Shot() {
                     @Override
-                    public void run() {
-                        f.webShot(new FilerActivity.Shot() {
-                            @Override
-                            public void done(byte[] jpg) {
-                                img.set(jpg);
-                                done.countDown();
-                            }
-                        });
+                    public void done(byte[] jpg) {
+                        img.set(jpg);
+                        done.countDown();
                     }
-                }, 250);
+                };
+                if (a instanceof FilerActivity) {
+                    final FilerActivity f = (FilerActivity) a;
+                    f.webKeepAlive();
+                    // a moment for the page to draw at TV size if it's only just been put on screen
+                    main.postDelayed(new Runnable() {
+                        @Override
+                        public void run() {
+                            f.webShot(new FilerActivity.Shot() {
+                                @Override
+                                public void done(byte[] jpg) {
+                                    cb.done(jpg);
+                                }
+                            });
+                        }
+                    }, 250);
+                } else Screen.shot(a, cb);
             }
         });
         boolean inTime = done.await(8, TimeUnit.SECONDS);
         byte[] b = img.get();
-        if (b == null) send(out, 409, "text/plain", (FilerActivity.instance == null ? "The Filer's closed"
-                : inTime ? "The TV couldn't take a picture of the page" : "The TV took too long taking the picture")
+        if (b != null) send(out, 200, "image/jpeg", b, null, "Cache-Control: no-store");
+        else send(out, 409, "text/plain", (why.get() != null ? why.get()
+                : inTime ? "The TV couldn't take a picture" : "The TV took too long taking the picture")
                 .getBytes(StandardCharsets.UTF_8), null);
-        else send(out, 200, "image/jpeg", b, null, "Cache-Control: no-store");
     }
 
     private JSONObject cmd(String cmd) throws Exception {
@@ -458,6 +481,25 @@ final class RemoteServer {
 
     private interface Job {
         Object run(FilerActivity f);
+    }
+
+    /** Runs r on the main thread and waits up to 2 s. */
+    private void onMainAny(final Runnable r) {
+        final CountDownLatch done = new CountDownLatch(1);
+        main.post(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    r.run();
+                } catch (Exception ignored) {
+                }
+                done.countDown();
+            }
+        });
+        try {
+            done.await(2, TimeUnit.SECONDS);
+        } catch (InterruptedException ignored) {
+        }
     }
 
     /** Runs on the main thread with the open Filer, null if it's closed. Waits up to 5 s. */
