@@ -100,7 +100,7 @@
         await sleep(1500);
         var pt = txt(document), a1 = pt.indexOf('Task Notes'), b1 = pt.indexOf('Add Note (Text)'), u = pt.indexOf('Upcoming Schedules');
         // strip AroFlo's button and icon text so the answer is just the facts
-        var junk = function (s) { return s.replace(/\b(sticky_note_2|Send SMS|Create Task Schedule|Capture Signature|Save Task|View Schedule)\b/g, ' ').replace(/\s+Reply\s+/g, ': ').replace(/\s+/g, ' ').trim(); };
+        var junk = function (s) { return s.replace(/\b(sticky_note_2|Send SMS|Create Task Schedule|Capture Signature|Save Task|View Schedule|Edit Note)\b/g, ' ').replace(/View \d+ Previous Notes( \.\.\.)?/g, ' ').replace(/ :/g, ':').replace(/\s+Reply\s+/g, ': ').replace(/\s+/g, ' ').trim(); };
         var notes = a1 < 0 ? '' : junk(pt.slice(a1 + 10, b1 > a1 ? b1 : a1 + 1500)).replace(/ (?=\d{1,2} [A-Z][a-z]+ 20\d\d \d{1,2}:\d\d[ap]m)/g, '\n    ');
         var sched = u < 0 ? 'no upcoming schedules' : junk(pt.slice(u, u + 260).replace(/\s+All Task Schedules[\s\S]*$/, ''));
         put(st.cur, 'notes ' + document.title.replace(/ - Task - AroFlo.*$/, '').slice(0, 70) + '\n  ' + sched + '\n  Notes: ' + (notes ? notes.slice(-1800) : 'none found on the page'));
