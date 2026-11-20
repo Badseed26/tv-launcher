@@ -94,5 +94,10 @@ it never logs him out mid job. The filer script on the TV never stands down afte
   term fix: download attachments straight from Outlook with the kept sign-in instead of the preview.
 - Watch for false wakes (2:53 am on 19/11 had nothing to file). Suspect: conversation times moving when someone
   replies in a builder thread.
+- Inbox pulls on the TV (20/11): Outlook only loaded the newest 24 emails until the page ran full screen at true PC
+  width and the pull waited longer for older mail (Inbox Pull 1.9.3: 3 goes of 10 sec). Wed 18/11 then matched the PC
+  pull exactly (22 inbox, 9 sent). A couple of emails per day still say "pane check failed" but read fine.
+- The Filer still runs at 800x500 to Outlook (folder list folded). Same density fix might help the PDF misses; not
+  done without asking Ethan.
 - Never tested: a real power cut (does the listener, helper and mail check come back after the TV boots to standby).
 - Phone remote page is new (build 34 on): first real use 20/11. Pictures never change what the TV shows, only /api/view does (picking Outlook, AroFlo or Filer screen).
