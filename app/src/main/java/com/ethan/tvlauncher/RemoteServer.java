@@ -257,6 +257,8 @@ final class RemoteServer {
                     public Object run(android.app.Activity t) {
                         String k = String.valueOf(a.get("k"));
                         if (t instanceof FilerActivity && !((FilerActivity) t).webWhich().isEmpty()) return ((FilerActivity) t).webKey(k);
+                        // Back on the Filer screen would close the Filer: that's what Close Filer (with its confirm) is for
+                        if (t instanceof FilerActivity && "back".equals(k)) return false;
                         return Screen.key(t, k);
                     }
                 })));
