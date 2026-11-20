@@ -68,7 +68,11 @@ This repo is **public**: never put logins, PINs, tokens, IP addresses or the bus
     and a task's notes and upcoming schedules (read only) as a TV: comment. For the inbox check when the PC's off.
   - AroFlo writes still go through the filer's queues (filer-note, filer-site labels on follow ups). ListenService opens
     the Filer for them every 5 min while the TV's off or home (once per 30 min), and an auto run doesn't close while
-    any are queued.
+    any are queued. Verified 20/11: the first cloud inbox run (no PC) queued 4 notes and 2 site info lines at 10:58 and
+    the open Filer had all 6 on their tasks by 11:03 (the filer does one note per 50 s, on purpose).
+  - Lookup answers have AroFlo's button and icon text stripped (runner-af.js, 20/11), one note per line.
+  - A missed-day pull reads the calendar from the pull's own day through to 5 weeks past today (build 46 on passes
+    `day` in the job; older builds start from today).
 - `ListenService`: foreground service with a partial wake lock, beat every 60 s. Runs the mail check every 5 min
   while the TV's off or on the home screen (never over an HDMI input or another app). Starts `RemoteServer`.
 - `Peek`: the screen-off mail check. Replays Outlook's own mail list request with the kept sign-in (code only,

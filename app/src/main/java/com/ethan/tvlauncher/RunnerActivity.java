@@ -564,6 +564,7 @@ public class RunnerActivity extends Activity {
             } else {
                 j.put("kind", "cal");
                 j.put("weeks", 5);
+                if (job.day != null) j.put("day", job.day); // calendar starts on the pull's day (20/11)
             }
         } catch (Exception ignored) {
         }

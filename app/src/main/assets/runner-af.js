@@ -39,8 +39,13 @@
         });
       };
       var from = new Date(); from.setHours(0, 0, 0, 0);
-      var back = JOB.back || 0; from = new Date(from.getTime() - back * 864e5);
-      var weeks = JOB.weeks || 5;
+      var back = JOB.back || 0;
+      // 20/11: a missed-day pull starts the calendar on the pull's own day (so that day's bookings are in) and still runs
+      // to the usual weeks past today.
+      var dm = /^(\d{4})-(\d\d)-(\d\d)$/.exec(JOB.day || '');
+      if (dm) { var pd = new Date(+dm[1], +dm[2] - 1, +dm[3]); back = Math.max(back, Math.round((from - pd) / 864e5)); }
+      from = new Date(from.getTime() - back * 864e5);
+      var weeks = (JOB.weeks || 5) + Math.ceil(back / 7);
       // 20/11: after each jump, wait for the bookings to stop changing (a quick read missed a week). Lines so far go in
       // window.__runPartial, so a timeout still hands back what it got.
       var DN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
