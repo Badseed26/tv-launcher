@@ -232,10 +232,14 @@ final class RemoteServer {
                 })));
                 return;
             case "/api/tap":
-                json(out, ok(onMain(new Job() {
+                // 20/11: a Filer page gets the Filer's own tap, any other screen of ours (home, all apps, Runner,
+                // the Filer screen) a plain tap. Another app gets nothing.
+                json(out, ok(onTop(new TopJob() {
                     @Override
-                    public Object run(FilerActivity f) {
-                        return f.webTap(num(a.get("x")), num(a.get("y")));
+                    public Object run(android.app.Activity t) {
+                        float x = num(a.get("x")), y = num(a.get("y"));
+                        if (t instanceof FilerActivity && ((FilerActivity) t).webTap(x, y)) return true;
+                        return Screen.tap(t, x, y);
                     }
                 })));
                 return;
@@ -248,18 +252,23 @@ final class RemoteServer {
                 })));
                 return;
             case "/api/key":
-                json(out, ok(onMain(new Job() {
+                json(out, ok(onTop(new TopJob() {
                     @Override
-                    public Object run(FilerActivity f) {
-                        return f.webKey(String.valueOf(a.get("k")));
+                    public Object run(android.app.Activity t) {
+                        String k = String.valueOf(a.get("k"));
+                        if (t instanceof FilerActivity && !((FilerActivity) t).webWhich().isEmpty()) return ((FilerActivity) t).webKey(k);
+                        return Screen.key(t, k);
                     }
                 })));
                 return;
             case "/api/scroll":
-                json(out, ok(onMain(new Job() {
+                json(out, ok(onTop(new TopJob() {
                     @Override
-                    public Object run(FilerActivity f) {
-                        return f.webScroll((int) num(a.get("dy")));
+                    public Object run(android.app.Activity t) {
+                        int dy = (int) num(a.get("dy"));
+                        if (t instanceof FilerActivity && !((FilerActivity) t).webWhich().isEmpty()) return ((FilerActivity) t).webScroll(dy);
+                        for (int i = 0; i < 3; i++) Screen.key(t, dy < 0 ? "up" : "down");
+                        return true;
                     }
                 })));
                 return;
@@ -481,6 +490,32 @@ final class RemoteServer {
 
     private interface Job {
         Object run(FilerActivity f);
+    }
+
+    private interface TopJob {
+        Object run(android.app.Activity top);
+    }
+
+    /** Runs on the main thread with our screen that's up (null when it's another app or the TV's off). Waits up to 5 s. */
+    private Object onTop(final TopJob j) {
+        final CountDownLatch done = new CountDownLatch(1);
+        final AtomicReference<Object> res = new AtomicReference<>();
+        main.post(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    android.app.Activity t = Screen.top;
+                    if (t != null) res.set(j.run(t));
+                } catch (Exception ignored) {
+                }
+                done.countDown();
+            }
+        });
+        try {
+            done.await(5, TimeUnit.SECONDS);
+        } catch (InterruptedException ignored) {
+        }
+        return res.get();
     }
 
     /** Runs r on the main thread and waits up to 2 s. */

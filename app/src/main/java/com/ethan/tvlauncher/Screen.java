@@ -82,6 +82,38 @@ final class Screen {
         return last.isEmpty() ? pkg : Character.toUpperCase(last.charAt(0)) + last.substring(1);
     }
 
+    /** Main thread. A real tap at fx, fy (0 to 1 across the screen) on our own screen (home, all apps, Runner...). */
+    static boolean tap(Activity a, float fx, float fy) {
+        View root = a.getWindow().getDecorView();
+        if (root.getWidth() == 0) return false;
+        float x = fx * root.getWidth(), y = fy * root.getHeight();
+        long down = android.os.SystemClock.uptimeMillis();
+        android.view.MotionEvent d = android.view.MotionEvent.obtain(down, down, android.view.MotionEvent.ACTION_DOWN, x, y, 0);
+        d.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);
+        a.dispatchTouchEvent(d);
+        d.recycle();
+        android.view.MotionEvent u = android.view.MotionEvent.obtain(down, down + 60, android.view.MotionEvent.ACTION_UP, x, y, 0);
+        u.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);
+        a.dispatchTouchEvent(u);
+        u.recycle();
+        return true;
+    }
+
+    /** Main thread. Back, Enter and up/down on our own screen, like the TV remote's buttons. */
+    static boolean key(Activity a, String k) {
+        if ("back".equals(k)) {
+            a.onBackPressed();
+            return true;
+        }
+        int code = "enter".equals(k) ? android.view.KeyEvent.KEYCODE_DPAD_CENTER
+                : "up".equals(k) ? android.view.KeyEvent.KEYCODE_DPAD_UP
+                : "down".equals(k) ? android.view.KeyEvent.KEYCODE_DPAD_DOWN : -1;
+        if (code < 0) return false;
+        a.dispatchKeyEvent(new android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, code));
+        a.dispatchKeyEvent(new android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, code));
+        return true;
+    }
+
     /** Main thread. A JPEG about 1000 wide of our own activity's window. */
     static void shot(final Activity a, final Shot cb) {
         final View root = a.getWindow().getDecorView();

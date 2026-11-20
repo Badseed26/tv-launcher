@@ -43,7 +43,8 @@ This repo is **public**: never put logins, PINs, tokens, IP addresses or the bus
    From 20/11 the picture is whatever the TV app has on screen at all times (home, all apps, Filer, Runner, and any
    screen we add later, as long as it calls `Screen.on/off` in onResume/onPause). Any other app or HDMI only gets its
    name in a text box, never a picture: HomeButtonService notes the front app's package name (nothing else) for that.
-   Taps still only work on the Filer's Outlook and AroFlo pages.
+   Taps, Back, Enter and scroll work on any of our screens (`Screen.tap/key`; a Filer page still gets the Filer's
+   own tap). The page reloads itself when the TV's build changes, so an old copy never runs against a new build.
 3. **ADB** from AirHQ: `am broadcast` to SecretsReceiver (saves logins into the Keystore) and CodeReceiver (log,
    press, code). Both need the DUMP permission, so only the ADB shell can send them.
 
