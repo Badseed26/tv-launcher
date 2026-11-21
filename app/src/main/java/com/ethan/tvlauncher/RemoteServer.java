@@ -285,6 +285,34 @@ final class RemoteServer {
             case "/api/cmd":
                 json(out, cmd(String.valueOf(a.get("c"))));
                 return;
+            case "/api/logins": {
+                // Saved logins for Claude's jobs on the TV (21/11). Only ever says which are saved, never the login.
+                JSONObject o = new JSONObject();
+                if (method.equals("POST")) {
+                    String site = String.valueOf(a.get("site")), act = String.valueOf(a.get("do"));
+                    if (Sites.byName(site) == null) {
+                        o.put("ok", false);
+                        o.put("msg", "unknown site");
+                    } else if (act.equals("clear")) {
+                        Sites.clear(c, site);
+                        TvLog.line(c, "Phone remote: cleared the saved " + site + " login");
+                        o.put("ok", true);
+                    } else {
+                        String user = a.get("user"), pass = a.get("pass");
+                        if (pass == null || pass.isEmpty()) {
+                            o.put("ok", false);
+                            o.put("msg", "needs the password");
+                        } else {
+                            Sites.save(c, site, user == null ? "" : user.trim(), pass);
+                            TvLog.line(c, "Phone remote: saved a " + site + " login");
+                            o.put("ok", true);
+                        }
+                    }
+                }
+                o.put("sites", Sites.list(c));
+                json(out, o);
+                return;
+            }
             default:
                 send(out, 404, "text/plain", "Not here".getBytes(StandardCharsets.UTF_8), null);
         }

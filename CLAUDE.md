@@ -115,7 +115,7 @@ Ethan wants everything doable from a chat with the PC off, using the TV as the c
 - Job code lives in `jobs/` and loads fresh from GitHub on every request (no build needed): `jobs/lib.js` (shared
   helpers) then `jobs/<area>.js`. It runs again on every page the job lands on, with `ec.state` carried over
   (`ec.go(url)` saves it). If a newer copy throws a script error, the TV runs the job once more with the last copy
-  that worked. Areas so far: aroflo (check, search, task, calendar, run, plus writes: note.add, note.edit, siteinfo.add, schedule.add, schedule.move), outlook (read only). `aroflo.run {js}` runs any bit of code on an
+  that worked. Areas so far: aroflo (check, search, task, calendar, run, plus writes: note.add, note.edit, siteinfo.add, schedule.add, schedule.move), outlook (read only), web (tabs on CNW, Tradezone, Ambrose Tradies, AroFlo). `aroflo.run {js}` runs any bit of code on an
   AroFlo page and returns the result: use it to look at a page (and `ec.shot`) before writing or fixing a job.
 - Presses: `ec.press(target, {expect, what})` only presses exactly one visible match, scrolls it into view, checks
   nothing's on top, real finger tap in its middle, then waits for `expect`. Pictures before and after go in the
@@ -138,6 +138,21 @@ Ethan wants everything doable from a chat with the PC off, using the TV as the c
   turning text into code (CSP). A js that doesn't parse fails the job cleanly.
 - Job code comes from the newest commit on the branch: one GitHub API call for the commit sha (kept 15 s), then the raw
   file at that sha (not rate limited, never stale). If GitHub's API is rate limited it falls back to the branch's raw file.
+- Web tabs (build 72 on, `jobs/web.js`): Claude drives CNW, Tradezone, Ambrose Tradies Web and AroFlo pages one step at
+  a time, like Chrome. web.open {url}, web.look, web.text, web.press {ref|text|sel}, web.fill {ref|label, value} or
+  {fields}, web.key, web.scroll, web.wait, web.shot (picture posted after the answer), web.run {js}, web.close. Every
+  answer has a look at the page: its text and each box, tick box, list and button with a ref number (refs stay the
+  same while the tab's open). The page stays open as a tab after each web job (`args.keep` minutes, 5 by default, 15
+  tops), so the next request carries on from there; then the TV goes back how it was. Ethan pressing Back or opening
+  another app closes it. Never pressed on web pages: anything that sends, submits, pays, checks out, lodges, finalises,
+  deletes or archives (wider than lib's list), and Enter isn't pressed in a form that has one of those. Passwords are
+  never typed by job code.
+- Saved logins (21/11): Ethan saves the CNW, Tradezone and Ambrose logins on the phone page (Saved logins box). They
+  go in the Keystore (`Sites.java`, keys `site_<name>_user/pass`) and only the app reads them back: web.js spots a
+  sign in page (or CNW's logged-out page), asks `ecApi.siteLogin(name)` and the TV fills it itself (one page or email
+  then password, ticks remember me), at most 3 goes per site in 30 min. Then it goes back to the page it was after.
+- BridgeSelect is off on the TV (Ethan, 21/11, until he's shown Claude how): blocked in Sites.BLOCKED and the Runner.
+  Ambrose's admin portal (tradiesadmin) is blocked like any admin area.
 - `RunnerActivity` runs api jobs (kind api) on its PC-size hidden page, full screen while they run, then back to how
   the TV was. With more jobs queued it stays open for them.
 - Verified 21/11 on build 63: tv.ping in ~10 s, aroflo.search "Four Mile" 21 s (signed itself in), aroflo.task 9530

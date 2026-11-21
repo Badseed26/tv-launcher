@@ -52,6 +52,12 @@ h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--mute
 <h2>Runner</h2>
 <div class="row"><select id="day"></select><button class="btn primary" id="pull" style="flex:0 0 110px">Pull inbox</button></div>
 <p class="small" id="runner">Reads the day's Inbox and Sent Items (read only, unread put back) plus the next 5 weeks of AroFlo bookings, and drops the bundle on the TV remote task for the inbox check. The Filer closes while it runs and reopens after.</p>
+<h2>Saved logins</h2>
+<div id="logins" class="small">Loading...</div>
+<div class="row"><select id="lsite"></select></div>
+<div class="row"><input id="luser" placeholder="Email or username" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+<div class="row"><input id="lpass" type="password" placeholder="Password" autocomplete="new-password"><button class="btn primary" id="lsave" style="flex:0 0 76px">Save</button></div>
+<p class="small">For Claude's jobs on the TV. Saved in the TV's locked storage and only the TV app reads it back: it signs itself in when a site logs it out. Claude never sees it. Save again to change one.</p>
 <p class="small">The picture is whatever the TV app has on screen (home screen, Filer or Runner). Any other app just shows its name. Tap the picture to tap the TV. On the Filer, the Outlook or AroFlo page you pick shows on the TV while you use it, going back behind the Filer screen 2 min after you stop.</p>
 
 <script>
@@ -121,6 +127,17 @@ $('pull').onclick=function(){var d=$('day').value;if(!d)return;var t=$('day').op
 $('send').onclick=function(){var t=$('text').value;if(!t)return;post('/api/type',{text:t}).then(function(){$('text').value='';setTimeout(shot,300);});};
 $('text').addEventListener('keydown',function(e){if(e.key=='Enter'){e.preventDefault();$('send').onclick();}});
 $('sendcode').onclick=function(){var t=$('code').value.replace(/\D/g,'');if(!t)return;post('/api/code',{code:t}).then(function(){$('code').value='';setTimeout(shot,800);setTimeout(status,2000);});};
+function logins(o){
+  if(!o||!o.sites)return;
+  $('logins').innerHTML=o.sites.map(function(x){return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 2px;border-bottom:1px solid var(--line)"><span>'+x.label+' <b style="color:'+(x.saved?'var(--good)':'var(--mute)')+'">'+(x.saved?'saved':'not saved')+'</b></span>'+(x.saved?'<button class="btn" style="flex:0 0 auto;padding:6px 10px" data-clear="'+x.name+'">Clear</button>':'')+'</div>';}).join('');
+  if(!$('lsite').options.length)$('lsite').innerHTML=o.sites.map(function(x){return '<option value="'+x.name+'">'+x.label+'</option>';}).join('');
+  document.querySelectorAll('[data-clear]').forEach(function(b){b.onclick=function(){if(!confirm('Clear the saved login?'))return;post('/api/logins',{'do':'clear',site:b.dataset.clear}).then(logins);};});
+}
+fetch('/api/logins',{cache:'no-store'}).then(function(r){return r.json();}).then(logins).catch(function(){});
+$('lsave').onclick=function(){
+  var p=$('lpass').value;if(!p){$('note').textContent='Put the password in first.';return;}
+  post('/api/logins',{site:$('lsite').value,user:$('luser').value,pass:p}).then(function(o){$('lpass').value='';$('luser').value='';$('note').textContent=o.ok?'Saved on the TV.':(o.msg||'Didn\'t save');logins(o);});
+};
 document.addEventListener('visibilitychange',function(){if(!document.hidden){status();shot();}});
 status();setInterval(function(){if(!document.hidden)status();},3000);
 // 20/11: watch the TV from the start without changing what it shows

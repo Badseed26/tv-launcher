@@ -61,6 +61,10 @@ final class Secrets {
         return prefs(c).contains(name);
     }
 
+    static synchronized void remove(Context c, String name) {
+        prefs(c).edit().remove(name).commit();
+    }
+
     static synchronized void clear(Context c) {
         prefs(c).edit().clear().commit();
     }

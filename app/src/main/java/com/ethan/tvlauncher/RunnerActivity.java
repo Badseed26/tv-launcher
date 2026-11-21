@@ -655,6 +655,21 @@ public class RunnerActivity extends Activity {
     private void finishJob() {
         final Job j = job;
         job = null;
+        // web.* jobs keep their page open as a tab for the next request (21/11), like a Chrome tab
+        String what = j != null && j.api != null ? j.api.optString("do") : "";
+        if ("api".equals(j.kind) && what.startsWith("web.") && !what.equals("web.close") && web != null) {
+            JSONObject a = j.api.optJSONObject("args");
+            int mins = Math.max(1, Math.min(15, a != null ? a.optInt("keep", 5) : 5));
+            tabOpen = true;
+            carry = j;
+            handler.removeCallbacks(tabClose);
+            handler.postDelayed(tabClose, mins * 60000L);
+            state = "tab open on " + host(web.getUrl()) + ", closes in " + mins + " min if nothing else comes";
+            setNow(state);
+            return;
+        }
+        tabOpen = false;
+        handler.removeCallbacks(tabClose);
         stopPage();
         state = "idle (last: " + (now != null ? now.getText() : "") + ")";
         setNow("Done.");
@@ -665,6 +680,37 @@ public class RunnerActivity extends Activity {
             carry = j;
             return;
         }
+        restore(j);
+    }
+
+    private boolean tabOpen;
+
+    /** The tab's had nothing for a while: close it and put the TV back how it was. */
+    private final Runnable tabClose = new Runnable() {
+        @Override
+        public void run() {
+            if (job != null || !tabOpen) return;
+            tabOpen = false;
+            Job j = carry;
+            carry = null;
+            stopPage();
+            state = "idle (tab closed)";
+            setNow("Done.");
+            dayRow.setVisibility(View.VISIBLE);
+            if (j != null) restore(j);
+            else finish();
+        }
+    };
+
+    private static String host(String u) {
+        try {
+            return String.valueOf(android.net.Uri.parse(u).getHost());
+        } catch (Exception e) {
+            return "?";
+        }
+    }
+
+    private void restore(final Job j) {
         handler.postDelayed(new Runnable() {
             @Override
             public void run() {
@@ -788,7 +834,7 @@ public class RunnerActivity extends Activity {
             public boolean shouldOverrideUrlLoading(WebView view, android.webkit.WebResourceRequest req) {
                 // api jobs never go near admin or settings areas (21/11)
                 String u = String.valueOf(req.getUrl());
-                if (job != null && "api".equals(job.kind) && BLOCKED.matcher(u).find()) {
+                if ((job != null && "api".equals(job.kind) || tabOpen) && (BLOCKED.matcher(u).find() || Sites.BLOCKED.matcher(String.valueOf(req.getUrl().getHost())).find())) {
                     apiLine("BLOCKED: tried to open " + u.replaceAll("[?#].*$", ""));
                     return true;
                 }
@@ -804,7 +850,8 @@ public class RunnerActivity extends Activity {
             @Override
             public void onPageFinished(WebView view, String u) {
                 if (view != web || job == null || pageWant == null || bundle == null && !"lookup".equals(job.kind) && !"api".equals(job.kind)) return;
-                boolean apiPage = job != null && "api".equals(job.kind) && u != null && (u.contains("office.aroflo.com") || u.contains("outlook.") || u.contains("login.microsoftonline.com"));
+                boolean apiPage = job != null && "api".equals(job.kind) && u != null && (u.contains("office.aroflo.com") || u.contains("outlook.") || u.contains("login.microsoftonline.com")
+                        || "web".equals(pageWant) && u.startsWith("http"));
                 if (u != null && (u.contains("office.aroflo.com") || apiPage) && !pageRan) {
                     handler.postDelayed(new Runnable() {
                         @Override
@@ -920,7 +967,7 @@ public class RunnerActivity extends Activity {
     // ---------------------------------------------------------------- api jobs (21/11, see Api.java)
 
     private static final java.util.regex.Pattern BLOCKED = java.util.regex.Pattern.compile(
-            "(?i)(siteadmin|site_admin|/admin/|/administration|usermanagement|/settings/)");
+            "(?i)(siteadmin|site_admin|/admin/|/administration|usermanagement|/settings/|tradiesadmin\\.)");
     private static final String JOBS_RAW = "https://raw.githubusercontent.com/Badseed26/tv-launcher/";
     private Job carry;
     private String apiJs, apiState, apiHook;
@@ -979,9 +1026,29 @@ public class RunnerActivity extends Activity {
                             return;
                         }
                         apiJs = code;
-                        String url = startUrl(area, req.optJSONObject("args"));
+                        JSONObject ja = req.optJSONObject("args");
+                        boolean reuse = "web".equals(area) && tabOpen && web != null && (ja == null || ja.optString("url").isEmpty());
+                        boolean wasTab = tabOpen;
+                        tabOpen = false;
+                        handler.removeCallbacks(tabClose);
+                        if (reuse) {
+                            apiLine("on the open tab: " + String.valueOf(web.getUrl()).replaceAll("[?#].*$", ""));
+                            pageWant = area;
+                            pageRan = true;
+                            pageAt = System.currentTimeMillis();
+                            runApi();
+                            long max0 = Math.max(30, Math.min(900, ja != null ? ja.optInt("timeout", 120) : 120)) * 1000L;
+                            handler.postDelayed(apiTimeout, max0);
+                            return;
+                        }
+                        if ("web".equals(area) && (ja == null || ja.optString("url").isEmpty())) {
+                            apiDone(Api.err(wasTab ? "web jobs need a url when the tab isn't a web tab" : "no tab open (it closes after a few minutes idle), send web.open with a url").toString());
+                            return;
+                        }
+                        String url = startUrl(area, ja);
                         if (url == null) {
-                            apiDone(Api.err("nothing on the TV knows how to do " + what).toString());
+                            apiDone(Api.err("web".equals(area) ? "the TV only opens AroFlo, CNW, Tradezone and Ambrose Tradies pages (https), not " + (ja == null ? "" : ja.optString("url"))
+                                    : "nothing on the TV knows how to do " + what).toString());
                             return;
                         }
                         apiLine("open " + url.replaceAll("[?#].*$", ""));
@@ -1003,6 +1070,10 @@ public class RunnerActivity extends Activity {
         String u = args == null ? "" : args.optString("url");
         if ("aroflo".equals(area)) return u.startsWith("https://office.aroflo.com/") ? u : AF_HOME;
         if ("outlook".equals(area)) return OUTLOOK;
+        if ("web".equals(area)) {
+            if (!u.startsWith("https://")) return null;
+            return Sites.startOk(android.net.Uri.parse(u).getHost()) ? u : null;
+        }
         return null;
     }
 
@@ -1278,6 +1349,22 @@ public class RunnerActivity extends Activity {
             });
         }
 
+        /** A supplier or Ambrose sign in page: the TV fills the saved login itself, the job code never sees it. */
+        @JavascriptInterface
+        public String siteLogin(String t, final String name) {
+            if (!ok(t)) return "no";
+            final String[] site = Sites.byName(name);
+            final String why = siteLoginAllowed(site);
+            if (why != null) return why;
+            handler.post(new Runnable() {
+                @Override
+                public void run() {
+                    doSiteLogin(site);
+                }
+            });
+            return "ok";
+        }
+
         /** AroFlo's sign-in page: the TV fills the saved login itself, the job code never sees it. */
         @JavascriptInterface
         public String login(String t) {
@@ -1291,6 +1378,52 @@ public class RunnerActivity extends Activity {
                 }
             });
             return "ok";
+        }
+    }
+
+    /**
+     * CNW, Tradezone or Ambrose sign in page (21/11): the TV fills the login saved on the phone page itself. At most 3
+     * goes per site in 30 min so the account never locks. Handles one page (email and password) or two (email, Next,
+     * then password). Ticks "remember me" so it stays signed in longer.
+     */
+    private String siteLoginAllowed(String[] site) {
+        if (site == null) return "this isn't a site the TV keeps a login for";
+        if (!Sites.saved(this, site[0])) return "no " + site[1] + " login saved on the TV yet (Ethan: phone page, Saved logins)";
+        android.content.SharedPreferences sp = getSharedPreferences("api", MODE_PRIVATE);
+        long now = System.currentTimeMillis();
+        String k = "login_" + site[0];
+        String[] t = sp.getString(k, "0,0,0").split(",");
+        int recent = 0;
+        for (String x : t) if (now - Long.parseLong(x) < 30 * 60000) recent++;
+        if (recent >= 3) return "already tried the saved " + site[1] + " login 3 times in 30 min, stopping so it doesn't lock";
+        sp.edit().putString(k, t[1] + "," + t[2] + "," + now).apply();
+        return null;
+    }
+
+    private void doSiteLogin(String[] site) {
+        WebView w = web;
+        if (w == null || site == null) return;
+        if (Sites.byHost(host(w.getUrl())) == null && !host(w.getUrl()).contains("login") && !host(w.getUrl()).contains("b2c")) return;
+        try {
+            JSONObject c = new JSONObject();
+            c.put("user", Secrets.get(this, Sites.userKey(site[0])));
+            c.put("pass", Secrets.get(this, Sites.passKey(site[0])));
+            apiLine("signing in to " + site[1] + " with the saved login");
+            w.evaluateJavascript("(function(c){var vis=function(e){var r=e.getBoundingClientRect(),st=getComputedStyle(e);return r.width>0&&r.height>0&&st.visibility!='hidden';};"
+                    + "var setV=function(el,v){var d=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;el.focus();d.call(el,v);"
+                    + "['input','keyup','change'].forEach(function(t){el.dispatchEvent(new Event(t,{bubbles:true}));});el.blur();};"
+                    + "var all=function(q,r){return [].slice.call((r||document).querySelectorAll(q)).filter(vis);};"
+                    + "var pwd=all('input[type=password]')[0],f=(pwd&&pwd.form)||document;"
+                    + "var uf=all('input[type=email],input[type=text],input:not([type])',f).filter(function(i){return /user|email|login|name|account|customer/i.test((i.name||'')+(i.id||'')+(i.autocomplete||'')+(i.placeholder||''))||i.type=='email';})[0]"
+                    + "||all('input[type=email],input[type=text],input:not([type])',f)[0];"
+                    + "if(uf&&c.user&&!uf.value)setV(uf,c.user);if(pwd)setV(pwd,c.pass);"
+                    + "all('input[type=checkbox]',f).forEach(function(x){var l=(x.name||'')+(x.id||'')+((x.closest('label')||{}).textContent||'');if(/remember|keep|stay/i.test(l)&&!x.checked)x.click();});"
+                    + "setTimeout(function(){var b=null,pats=pwd?[/^\\s*(log\\s?in|sign\\s?in|login)\\s*$/i,/(log|sign)\\s?in/i]:[/^\\s*(next|continue)\\s*$/i,/(log|sign)\\s?in/i];"
+                    + "var cs=all('button,input[type=submit],a[role=button],[role=button]');for(var i=0;i<pats.length&&!b;i++)for(var j=0;j<cs.length;j++){"
+                    + "var tt=(cs[j].textContent||cs[j].value||'').trim();if(pats[i].test(tt)){b=cs[j];break;}}"
+                    + "if(!b&&f!==document)b=f.querySelector('button[type=submit],input[type=submit],button:not([type])');if(b)b.click();else if(pwd&&pwd.form)pwd.form.requestSubmit?pwd.form.requestSubmit():pwd.form.submit();},500);})(" + c + ")", null);
+        } catch (Exception e) {
+            apiLine("sign in failed: " + e.getMessage());
         }
     }
 

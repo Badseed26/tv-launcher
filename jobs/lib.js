@@ -25,6 +25,8 @@ window.ec = (function () {
   };
   // A file for the answer (an attachment, say): goes on the remote task as its own comment once the job's done
   ec.file = function (name, b64, type) { api.file(TOKEN, String(name), String(b64), String(type || '')); };
+  // A supplier or Ambrose sign in page: the TV fills the login Ethan saved on the phone page (the job never sees it)
+  ec.siteLogin = function (name) { try { return api.siteLogin(TOKEN, String(name)); } catch (e) { return 'this TV build can\'t sign in to sites yet'; } };
   ec.sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
   ec.waitFor = async function (fn, ms, every) {
     var t0 = Date.now(); ms = ms || 10000;

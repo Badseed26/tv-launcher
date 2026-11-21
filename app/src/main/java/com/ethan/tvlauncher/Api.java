@@ -199,7 +199,49 @@ final class Api {
         final String file = !ok ? log : result.toString().length() > 3500 ? pretty : null;
         final String name = file == null ? null : "api-" + id + (ok ? ".json" : "-log.txt");
         post(c, file == null ? text : "api " + id + (ok ? " ok, result attached" : " err " + result.optString("err") + " (log attached)"), file, name);
+        // web.shot and friends: the page's newest pictures come straight after the answer
+        if (result.optInt("pictures", 0) > 0) {
+            final int n = Math.min(4, result.optInt("pictures"));
+            main.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    postShots(c, id, n);
+                }
+            }, 1500);
+        }
         kick(c);
+    }
+
+    /** A job's newest pictures (up to max), one comment each. False if it has none. */
+    static boolean postShots(final Context c, final String id, int max) {
+        File[] shots = dir(c, id).listFiles(new java.io.FilenameFilter() {
+            @Override
+            public boolean accept(File d, String n) {
+                return n.endsWith(".jpg");
+            }
+        });
+        if (shots == null || shots.length == 0) return false;
+        Arrays.sort(shots);
+        final File[] send = shots.length > max ? Arrays.copyOfRange(shots, shots.length - max, shots.length) : shots;
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                String token = Secrets.get(c, Secrets.TODOIST_TOKEN);
+                if (token == null) return;
+                for (File f : send) {
+                    try {
+                        JSONObject att = upload(token, bytes(f), f.getName(), "image/jpeg");
+                        JSONObject m = new JSONObject();
+                        m.put("task_id", Remote.TASK);
+                        m.put("content", "TV: api " + id + " picture " + f.getName());
+                        if (att != null) m.put("attachment", att);
+                        Http.todoist(token, "POST", "comments", m);
+                    } catch (Exception ignored) {
+                    }
+                }
+            }
+        }, "api-shots").start();
+        return true;
     }
 
     private static String answer(String id, JSONObject o) {
@@ -438,36 +480,8 @@ final class Api {
                 case "tv.shots": {
                     // a job's screenshots, one comment each
                     String id = a.optString("id");
-                    File[] shots = dir(c, id).listFiles(new java.io.FilenameFilter() {
-                        @Override
-                        public boolean accept(File d, String n) {
-                            return n.endsWith(".jpg");
-                        }
-                    });
-                    if (shots == null || shots.length == 0) return err("no pictures for " + id);
-                    Arrays.sort(shots);
-                    final File[] send = shots.length > 12 ? Arrays.copyOfRange(shots, shots.length - 12, shots.length) : shots;
-                    new Thread(new Runnable() {
-                        @Override
-                        public void run() {
-                            String token = Secrets.get(c, Secrets.TODOIST_TOKEN);
-                            if (token == null) return;
-                            for (File f : send) {
-                                try {
-                                    byte[] b = bytes(f);
-                                    JSONObject att = upload(token, b, f.getName(), "image/jpeg");
-                                    JSONObject m = new JSONObject();
-                                    m.put("task_id", Remote.TASK);
-                                    m.put("content", "TV: api shot " + f.getName());
-                                    if (att != null) m.put("attachment", att);
-                                    Http.todoist(token, "POST", "comments", m);
-                                } catch (Exception ignored) {
-                                }
-                            }
-                        }
-                    }, "api-shots").start();
+                    if (!postShots(c, id, 12)) return err("no pictures for " + id);
                     o.put("ok", true);
-                    o.put("sending", send.length);
                     return o;
                 }
                 case "tv.safe": {
