@@ -222,13 +222,14 @@ ec.run(async function () {
     var inB = eds.filter(function (e) { return e.element && blk.contains(e.element.$); }), ed2 = inB.length == 1 ? inB[0] : eds.length == 1 ? eds[0] : null;
     if (!ed2) return ec.fail('the note\'s editor didn\'t open (or more than one did), nothing changed');
     var old = ed2.getData();
-    if (flat(old.replace(/<[^>]+>/g, ' ')).toLowerCase().indexOf(want) < 0) { ed2.setData(old); ed2.resetDirty(); return ec.fail('the editor that opened isn\'t that note, nothing changed'); }
+    var unhtml = function (h) { var d = document.createElement('div'); d.innerHTML = String(h).replace(/<\/(p|li|div)>/g, ' </$1>'); return flat(d.textContent); };
+    if (unhtml(old).toLowerCase().indexOf(want) < 0) { ed2.setData(old); ed2.resetDirty(); return ec.fail('the editor that opened isn\'t that note, nothing changed'); }
     var tn = CKEDITOR.instances.thisnote;
     if (tn && flat(tn.getData())) { ed2.setData(old); ed2.resetDirty(); return ec.fail('the add note box has text in it, not saving over it'); }
     var save = document.getElementById('btnAddNote');
     if (!save) { ed2.setData(old); ed2.resetDirty(); return ec.fail('no Save Note button, nothing changed'); }
     ed2.setData(html2); await ec.sleep(600);
-    var took = flat(ed2.getData().replace(/<[^>]+>/g, ' ')).indexOf(plain2.slice(0, 60)) >= 0;
+    var took = unhtml(ed2.getData()).indexOf(plain2.slice(0, 60)) >= 0;
     if (ec.dry) { ed2.setData(old); ed2.resetDirty(); return { ok: true, dry: true, jn: A.jn, checks: 'found the one note, author ok, editor ' + ed2.name + ' opened, new text ' + (took ? 'went in' : 'did NOT go in') + ', Save Note found, old text put back, nothing saved' }; }
     if (!took) { ed2.setData(old); ed2.resetDirty(); return ec.fail('the new text didn\'t take in the editor, nothing changed'); }
     S.fired = true; S.count = links.length; ec.save();
