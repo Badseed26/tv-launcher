@@ -139,7 +139,9 @@ ec.run(async function () {
   }
 
   // ---- a landing page with just a LOG IN button (Ambrose admin, 21/11): press it to get to the sign in page
-  if (site && !pwBox() && !S.landed) {
+  // Ambrose admin's front page only. Never anywhere else: Tradies Web's booking pages have a SIGN IN that's the site
+  // safety sign in (22/11), which is Ethan's to do on site, never the TV's.
+  if (site && site.name == 'ambroseadmin' && !pwBox() && !S.landed && /^\/(PurchaseOrders\/?|Account.*|)?$/i.test(location.pathname)) {
     var lb = all('a, button').filter(vis).filter(function (e) { return /^\s*(log ?in|sign ?in)\s*$/i.test(e.innerText || ''); });
     var appUp = all('input[type=search], table tbody tr, nav a[href*="Purchase"]').some(vis);
     if (lb.length == 1 && !appUp) {
@@ -225,7 +227,9 @@ ec.run(async function () {
     return ++window.__ecRef;
   };
   // Web pages get a wider block than lib's: anything that sends, submits, pays or finalises is Ethan's to press
-  var WEB_BLOCK = /\b(submit|send|pay|payment|checkout|check out|place order|confirm order|complete purchase|purchase now|buy now|lodge|finali[sz]e|complete report|mark (as )?complete|delete|archive|reply|forward|unsubscribe)\b/i;
+  var WEB_BLOCK = /\b(submit|send|pay|payment|checkout|check out|place order|confirm order|complete purchase|purchase now|buy now|lodge|finali[sz]e|complete report|mark (as )?complete|delete|archive|reply|forward|unsubscribe|sign off|sign on|acknowledge|attend(ed|ance)?|clock (in|out))\b/i;
+  // Tradies Web's site safety pages (sign in to site, PSEA, sign off) are a real on-site record: no presses or fills
+  var safetyPage = function () { return /tradies\.ambrosebuilding/i.test(location.host) && /safety|signin|sign-in|signoff|psea/i.test(location.pathname); };
   var shown = function (el) {
     if (vis(el)) return true;
     // a styled tick box: the real input is hidden behind its label
@@ -342,6 +346,7 @@ ec.run(async function () {
   var ops = {};
   ops.look = async function () { return {}; };
   ops.press = async function (a) {
+    if (safetyPage()) throw new Error('this is the site safety sign in page, the TV never presses anything here (Ethan does it on site)');
     var el = target(a), t0 = tapTarget(el);
     var said = flat(t0.innerText || t0.value || t0.getAttribute('aria-label') || t0.title);
     if (WEB_BLOCK.test(said)) throw new Error('not pressing "' + said.slice(0, 60) + '", send, submit, pay and the like are Ethan\'s to press');
@@ -352,6 +357,7 @@ ec.run(async function () {
     return { did: 'pressed ' + ec.label(t0), moved: location.href != before, changed: ec.text().length != beforeText };
   };
   ops.fill = async function (a) {
+    if (safetyPage()) throw new Error('this is the site safety sign in page, the TV never fills anything here');
     var list = a.fields || [a], did = [];
     for (var i = 0; i < list.length; i++) {
       try { did.push((list[i].ref || list[i].label || list[i].sel) + ': ' + await setOne(list[i])); }
