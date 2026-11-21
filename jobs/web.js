@@ -228,6 +228,41 @@ ec.run(async function () {
     return o;
   };
 
+  var setOne = async function (a) {
+    var el = target(a), v = a.value, tag = el.tagName, type = (el.type || '').toLowerCase();
+    var role = el.getAttribute('role') || '';
+    if (tag == 'SELECT') {
+      var want = String(v).toLowerCase(), opts = [].slice.call(el.options);
+      var opt = opts.filter(function (x) { return flat(x.text).toLowerCase() == want || x.value.toLowerCase() == want; })[0] ||
+        opts.filter(function (x) { return flat(x.text).toLowerCase().indexOf(want) >= 0; })[0];
+      if (!opt) throw new Error('"' + v + '" isn\'t in ' + describe({ el: el, ref: el.getAttribute('data-ec') }));
+      var set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set;
+      el.focus(); set.call(el, opt.value);
+      ['input', 'change'].forEach(function (t) { el.dispatchEvent(new Event(t, { bubbles: true })); });
+      if (window.jQuery) try { jQuery(el).trigger('change'); } catch (e) {}
+      el.blur();
+      ec.log('pick ' + ec.label(el) + ' = ' + flat(opt.text));
+      return 'picked "' + flat(opt.text) + '"';
+    }
+    if (type == 'checkbox' || type == 'radio' || /checkbox|radio/.test(role) || /^MAT-(CHECKBOX|RADIO-BUTTON)$/.test(tag)) {
+      var on = function () { return el.checked !== undefined ? el.checked : /true/.test(el.getAttribute('aria-checked') || '') || /checked/.test(el.className); };
+      var wantOn = !(v === false || v === 'false' || v === 0 || v === 'no' || v === 'off');
+      if (on() == wantOn) return 'already ' + (wantOn ? 'ticked' : 'clear');
+      await ec.press(tapTarget(el), { expect: function () { return on() == wantOn; }, what: 'the tick to change', shots: false });
+      return wantOn ? 'ticked' : 'cleared';
+    }
+    if (el.isContentEditable) {
+      el.focus(); el.innerText = String(v);
+      el.dispatchEvent(new InputEvent('input', { bubbles: true })); el.blur();
+      return 'typed';
+    }
+    if (type == 'password') throw new Error('passwords are never typed by a job, the TV fills its saved logins itself');
+    ec.fill(el, String(v));
+    // pickers that open a list as you type (suburbs, addresses): settle so the next step sees the list
+    await ec.sleep(300);
+    return 'typed';
+  };
+
   // ---- the actions. Each gives back what it did; the job adds a look at the page
   var ops = {};
   ops.look = async function () { return {}; };
@@ -299,7 +334,7 @@ ec.run(async function () {
       if (!ops[op]) return ec.fail('step ' + (i + 1) + ': can\'t do "' + st.do + '" in steps (look, press, fill, key, scroll, wait, sleep, shot)', { did: did });
       S.si = i + 1; S.did = did.concat([(i + 1) + ' ' + op + ' (moved page)']); ec.save();
       try { var r = await ops[op](st); did.push((i + 1) + ' ' + op + ': ' + (r.did || 'ok')); }
-      catch (e) { did.push((i + 1) + ' ' + op + ': FAILED ' + e.message); var o = { did: did, look: look({ chars: 800 }) }; if (S.pics) o.pictures = S.pics; return ec.fail('step ' + (i + 1) + ' failed: ' + e.message, o); }
+      catch (e) { did.push((i + 1) + ' ' + op + ': FAILED ' + e.message); var o = { did: did, look: look({ chars: 800, max: 40 }) }; if (S.pics) o.pictures = S.pics; return ec.fail('step ' + (i + 1) + ' failed: ' + e.message, o); }
       S.did = did; ec.save();
     }
     return answer({ did: did, pictures: S.pics || 0 });
@@ -311,7 +346,7 @@ ec.run(async function () {
   if (one) {
     if (one == 'press') { S.acted = 'press'; ec.save(); }
     try { var res = await ops[one](A); }
-    catch (e) { return ec.fail(e.message, { did: e.did, look: look({ chars: 600 }) }); }
+    catch (e) { return ec.fail(e.message, { did: e.did, look: look({ chars: 600, max: 40 }) }); }
     S.acted = null; ec.save();
     return answer(res);
   }
