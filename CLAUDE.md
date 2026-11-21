@@ -105,7 +105,9 @@ This repo is **public**: never put logins, PINs, tokens, IP addresses or the bus
 ## The TV api (21/11): the TV as Claude's computer
 Ethan wants everything doable from a chat with the PC off, using the TV as the compute.
 - Send `api {"id":"a1","do":"aroflo.task","args":{"jn":"9530"}}` on the Todoist remote. Answer: `TV: api a1 ok {...}`
-  or `TV: api a1 err {...}` (no "queued" comment when it goes straight away, build 74 on). Big results and every failed job's log come attached as a file. Optional: `"key"` (a write
+  or `TV: api a1 err {...}` (no "queued" comment when it goes straight away, build 74 on). Build 76 on also rewrites the
+  description of the "* TV answers" task (`6j44X9fp3rv7pPjX`, Api.BOARD) with the newest answers, newest first: read
+  that with a direct task fetch, it's there straight away (Todoist's activity feed runs about a minute behind). Big results and every failed job's log come attached as a file. Optional: `"key"` (a write
   sent twice with the same key only runs once, the second gets the first answer back), `"dry":true`, `"branch":"test"`
   (job code from that branch), `args.timeout` (sec, default 180), `args.url` (start page, same site only).
 - `Api.java`: queue (kept through restarts, one at a time), keys, logs. Jobs wait while the TV's on another app or HDMI

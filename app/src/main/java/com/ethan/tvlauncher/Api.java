@@ -49,6 +49,12 @@ final class Api {
 
     /** Main thread. A request off the remote. Returns the first reply (or null when the answer comes later). */
     static String request(Context c, String body) {
+        String r = request0(c, body);
+        if (r != null) board(c, r);
+        return r;
+    }
+
+    private static String request0(Context c, String body) {
         JSONObject r;
         try {
             r = new JSONObject(body.trim());
@@ -201,6 +207,8 @@ final class Api {
         final String file = !ok ? log : result.toString().length() > 3500 ? pretty : null;
         final String name = file == null ? null : "api-" + id + (ok ? ".json" : "-log.txt");
         post(c, file == null ? text : "api " + id + (ok ? " ok, result attached" : " err " + result.optString("err") + " (log attached)"), file, name);
+        String full = result.toString();
+        board(c, "api " + id + (ok ? " ok " : " err ") + (full.length() > 9000 ? full.substring(0, 9000) + "...(cut, the full answer's attached on the remote)" : full));
         // web.shot and friends: the page's newest pictures come straight after the answer
         if (result.optInt("pictures", 0) > 0) {
             final int n = Math.min(4, result.optInt("pictures"));
@@ -244,6 +252,38 @@ final class Api {
             }
         }, "api-shots").start();
         return true;
+    }
+
+    /** The answers task (21/11): its description holds the newest answers, newest first, so Claude reads them at once
+     * (Todoist's activity feed runs about a minute behind). */
+    static final String BOARD = "6j44X9fp3rv7pPjX";
+    private static final java.util.concurrent.ExecutorService boardQ = java.util.concurrent.Executors.newSingleThreadExecutor();
+    private static final String SEP = "\n~~~~\n";
+
+    static void board(final Context c, final String line) {
+        boardQ.execute(new Runnable() {
+            @Override
+            public void run() {
+                String token = Secrets.get(c, Secrets.TODOIST_TOKEN);
+                if (token == null) return;
+                SharedPreferences sp = p(c);
+                String at = new java.text.SimpleDateFormat("h:mm:ss a", java.util.Locale.US).format(new java.util.Date());
+                StringBuilder sb = new StringBuilder("[" + at + "] TV: " + line);
+                for (String old : sp.getString("board", "").split(java.util.regex.Pattern.quote(SEP))) {
+                    if (old.isEmpty() || sb.length() + old.length() > 14000) continue;
+                    sb.append(SEP).append(old);
+                }
+                String all = sb.toString();
+                sp.edit().putString("board", all).apply();
+                try {
+                    JSONObject b = new JSONObject();
+                    b.put("description", all);
+                    Http.todoist(token, "POST", "tasks/" + BOARD, b);
+                } catch (Exception e) {
+                    TvLog.line(c, "api: couldn't update the answers task: " + e.getMessage());
+                }
+            }
+        });
     }
 
     private static String answer(String id, JSONObject o) {
