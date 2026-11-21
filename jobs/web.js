@@ -39,16 +39,22 @@ ec.run(async function () {
   var all = function (q, r) { return [].slice.call((r || document).querySelectorAll(q)); };
   var pwBox = function () { return all('input[type=password]').filter(vis)[0]; };
   // Wait for the page to stop changing (half a second quiet, 8 s tops)
+  // Wait for the page to stop changing: 400 ms with no new content (sliders and animations moving things about don't
+  // count), 3 s tops unless asked, then any spinner gone (4 s tops)
   var settle = async function (ms) {
     var last = Date.now(), t0 = Date.now();
-    var mo = new MutationObserver(function () { last = Date.now(); });
-    try { mo.observe(document.documentElement, { subtree: true, childList: true, attributes: true, characterData: true }); } catch (e) {}
-    while (Date.now() - last < 500 && Date.now() - t0 < (ms || 8000)) await ec.sleep(120);
+    var mo = new MutationObserver(function (list) {
+      for (var i = 0; i < list.length; i++) if (list[i].type != 'childList' || list[i].addedNodes.length || list[i].removedNodes.length) { last = Date.now(); return; }
+    });
+    try { mo.observe(document.body || document.documentElement, { subtree: true, childList: true, characterData: true }); } catch (e) {}
+    while (Date.now() - last < 400 && Date.now() - t0 < (ms || 3000)) await ec.sleep(100);
     mo.disconnect();
-    await ec.waitFor(function () { return !all('.spinner,.loading,[aria-busy=true],.mat-progress-spinner,.loader').some(vis); }, 4000, 200);
+    await ec.waitFor(function () { return !all('.spinner,.loading,[aria-busy=true],.mat-progress-spinner,.loader').some(vis); }, 4000, 150);
   };
 
-  await settle(10000);
+  // a page that's already been worked on this tab is settled: don't wait again
+  if (window.__ecTab) await settle(800); else await settle(6000);
+  window.__ecTab = true;
 
   // Ambrose admin (Blazor) often doesn't come up: spinner, the error bar, or a lost connection. Reload, 4 goes tops.
   if (site && site.name == 'ambroseadmin') {
