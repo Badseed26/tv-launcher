@@ -31,7 +31,7 @@ This repo is **public**: never put logins, PINs, tokens, IP addresses or the bus
    command; the TV polls every 20 s and answers with a comment starting `TV:`. Commands: wake, open filer,
    close filer, status, log, reload, press <label>, code <n>, update, web remote, web remote new pin, check mail,
    test mail check, mail check on/off, mail check opens on/off, stay awake on/off, inbox pull <day>,
-   lookup <terms; ...>. The TV ignores anything over
+   lookup <terms; ...>, tv code (shows it), tv code <4 to 8 digits> (sets it). The TV ignores anything over
    30 min old and deletes comments over 2 days old. The task description is the TV's heartbeat (last check-in,
    build, screen, Filer states, last mail check), rewritten every few minutes; the dashboard shows it.
 2. **Phone remote page** (build 34 on, `RemoteServer.java`, `assets/remote.html`, `assets/remote-login.html`).
@@ -50,6 +50,10 @@ This repo is **public**: never put logins, PINs, tokens, IP addresses or the bus
 
 ## How the pieces fit
 - `MainActivity`: home screen (clock, Filer, Updates, All apps, Settings, favourite app tiles). `Ui`: shared views.
+- `Lock` (21/11): the Filer and Runner tiles ask for a code when pressed on the TV itself (number keys or an on screen
+  pad, 5 wrong tries locks it 10 min, no asking again for 2 min after). Taps and keys from the phone page (`Screen.tap/key`
+  mark `Lock.remoteAt`), the Todoist remote and auto runs never ask. The code is `tv code <digits>` on the Todoist
+  remote, kept in the app's own storage; until one's set it's the phone page PIN. The phone page also has Wake TV.
 - `FilerActivity`: two hidden WebViews (Outlook and AroFlo) laid out at 1600x1000 pixels behind a dimmed,
   drifting Filer screen. Injects `gm-shim.js` (fakes Tampermonkey's GM_ API, storage in `GmStore`, HTTP in `Http`)
   wrapped around the filer script from ec-userscripts main (cached in filesDir, the new copy is used from the next

@@ -471,6 +471,18 @@ final class RemoteServer {
                     }
                 });
                 break;
+            case "wake": // the Wake TV button (Ethan, 21/11), same as wake on the Todoist remote
+                android.os.PowerManager pm = (android.os.PowerManager) c.getSystemService(Context.POWER_SERVICE);
+                final boolean on = pm != null && pm.isInteractive();
+                main.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        ListenService.wakeScreen(c);
+                        if (!on) WakeActivity.start(c, false);
+                    }
+                });
+                note = on ? "TV's already on." : "Turning the TV on, give it a few seconds.";
+                break;
             case "update":
                 note = "Checking for an update...";
                 Updater.remoteUpdate(c, new Remote.Say() {

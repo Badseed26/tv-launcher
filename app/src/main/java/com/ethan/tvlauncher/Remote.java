@@ -179,6 +179,17 @@ final class Remote {
                     // Try 2: a screen that asks Android to switch the TV on as it opens
                     if (!screenOn) WakeActivity.start(c, false);
                     reply = screenOn ? "TV was already on." : "Turning the TV on. Send status in a few seconds to check.";
+                } else if (lc.equals("tv code") || lc.startsWith("tv code ")) {
+                    // The code the TV asks for before the Filer or Runner opens from the TV itself (21/11)
+                    String n = lc.substring(7).trim();
+                    if (n.isEmpty()) {
+                        reply = Lock.ownCode(c) ? "The TV code is " + Lock.code(c) + "." : "No TV code set, the TV uses the phone page PIN (" + RemoteServer.pin(c) + "). Send tv code <4 to 8 digits> to set one.";
+                    } else if (!n.matches("\\d{4,8}")) {
+                        reply = "The TV code has to be 4 to 8 digits, nothing changed.";
+                    } else {
+                        Lock.setCode(c, n);
+                        reply = "TV code set. The TV asks for it before the Filer or Runner opens from the TV, the phone page doesn't.";
+                    }
                 } else if (lc.equals("web remote") || lc.equals("web remote new pin")) {
                     String pin = lc.endsWith("new pin") ? RemoteServer.newPin(c) : RemoteServer.pin(c);
                     String ip = RemoteServer.tailscaleIp();

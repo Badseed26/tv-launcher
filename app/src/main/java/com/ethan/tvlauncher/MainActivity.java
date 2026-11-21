@@ -100,13 +100,24 @@ public class MainActivity extends Activity implements Ui.FocusListener {
         TextView filer = Ui.pill(this, "Filer", new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                startActivity(new Intent(MainActivity.this, FilerActivity.class));
+                // The TV asks for the code first, the phone page doesn't (Ethan, 21/11)
+                Lock.ask(MainActivity.this, "Filer", new Runnable() {
+                    @Override
+                    public void run() {
+                        startActivity(new Intent(MainActivity.this, FilerActivity.class));
+                    }
+                });
             }
         });
         TextView runner = Ui.pill(this, "Runner", new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                startActivity(new Intent(MainActivity.this, RunnerActivity.class));
+                Lock.ask(MainActivity.this, "Runner", new Runnable() {
+                    @Override
+                    public void run() {
+                        startActivity(new Intent(MainActivity.this, RunnerActivity.class));
+                    }
+                });
             }
         });
         TextView updates = Ui.pill(this, "Updates", new View.OnClickListener() {

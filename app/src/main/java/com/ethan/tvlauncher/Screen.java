@@ -84,6 +84,7 @@ final class Screen {
 
     /** Main thread. A real tap at fx, fy (0 to 1 across the screen) on our own screen (home, all apps, Runner...). */
     static boolean tap(Activity a, float fx, float fy) {
+        Lock.remoteAt = android.os.SystemClock.uptimeMillis(); // phone page taps never get asked for the TV code
         View root = a.getWindow().getDecorView();
         if (root.getWidth() == 0) return false;
         float x = fx * root.getWidth(), y = fy * root.getHeight();
@@ -101,6 +102,7 @@ final class Screen {
 
     /** Main thread. Back, Enter and up/down on our own screen, like the TV remote's buttons. */
     static boolean key(Activity a, String k) {
+        Lock.remoteAt = android.os.SystemClock.uptimeMillis();
         if ("back".equals(k)) {
             a.onBackPressed();
             return true;
