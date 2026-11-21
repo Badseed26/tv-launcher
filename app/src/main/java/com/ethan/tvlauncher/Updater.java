@@ -76,8 +76,21 @@ final class Updater {
                         return;
                     }
                     boolean filer = FilerActivity.instance != null;
+                    // 21/11: the install box can't be pressed in standby, so wake the TV for it and put it back to sleep after
+                    android.os.PowerManager pm = (android.os.PowerManager) c.getSystemService(Context.POWER_SERVICE);
+                    final boolean off = pm != null && !pm.isInteractive();
                     c.getSharedPreferences("updater", Context.MODE_PRIVATE).edit()
-                            .putBoolean("reopenFiler", filer).putLong("remoteAt", System.currentTimeMillis()).commit();
+                            .putBoolean("reopenFiler", filer).putBoolean("sleepAfter", off).putLong("remoteAt", System.currentTimeMillis()).commit();
+                    if (off) {
+                        new android.os.Handler(android.os.Looper.getMainLooper()).post(new Runnable() {
+                            @Override
+                            public void run() {
+                                ListenService.wakeScreen(c);
+                                WakeActivity.start(c, false);
+                            }
+                        });
+                        Thread.sleep(6000);
+                    }
                     autoConfirmUntil = System.currentTimeMillis() + 3 * 60000;
                     TvLog.line(c, "Update: remote update to build " + latest + " (from " + mine + ")");
                     say.say("Updating build " + mine + " to " + latest + ". The TV restarts the app"
