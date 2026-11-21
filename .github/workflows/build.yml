@@ -56,3 +56,6 @@ jobs:
         run: |
           gh release delete latest --yes --cleanup-tag || true
           gh release create latest tv-launcher.apk version.json --title "Build ${{ github.run_number }}" --notes "Latest TV launcher build"
+          # gh sometimes leaves it as a draft after a delete and recreate, which the TV can't see (build 57, 21/11)
+          sleep 3
+          gh release edit latest --draft=false || true
