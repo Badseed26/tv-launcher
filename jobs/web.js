@@ -29,6 +29,11 @@ ec.run(async function () {
   var siteFor = function (h) { return SITES.filter(function (s) { return s.host.test(h); })[0]; };
   var site = siteFor(location.host);
   // a sign in page on some other host (a login server): it's for the site this job came from
+  // Ambrose's Auth0 page says which app it's for in the title (22/11): Tradies Web or Tradies Admin
+  if (!site && /auth0\.com$/i.test(location.host)) {
+    if (/Tradies Web/i.test(document.title)) site = SITES.filter(function (s) { return s.name == 'ambrose'; })[0];
+    else if (/Tradies Admin/i.test(document.title)) site = SITES.filter(function (s) { return s.name == 'ambroseadmin'; })[0];
+  }
   if (site) S.lastSite = site.name;
   else if (A.url && !S.lastSite) { try { var h0 = siteFor(new URL(A.url).host); if (h0) S.lastSite = h0.name; } catch (e) {} }
   if (!site && S.lastSite && (pwBoxNow() || /login|b2c|auth|account|identity|sso/i.test(location.host))) site = SITES.filter(function (s) { return s.name == S.lastSite; })[0];
@@ -102,6 +107,34 @@ ec.run(async function () {
       ec.leaving = true; await ec.sleep(25000);
       if (!ec.finished) ec.fail('AroFlo didn\'t move on after the sign-in');
       return;
+    }
+  }
+
+  // ---- Tradies Web (22/11): its sign in page has new (email), classic and internal. Ethan's is new. If the admin
+  // sign in gets used ("not linked"), sign out first. Its redirects are slow (up to a minute), so wait them out.
+  if (site && site.name == 'ambrose') {
+    var tw = function (re) { return all('button').filter(vis).filter(function (b) { return re.test(flat(b.innerText)); })[0]; };
+    if (/\/not-linked/i.test(location.pathname)) {
+      if (S.unlinked) return ec.fail('Tradies Web still says this email isn\'t linked after signing out, check the saved Ambrose Tradies Web login');
+      S.unlinked = true; ec.save();
+      var so = tw(/^sign out$/i);
+      if (so) { ec.log('Tradies Web used the admin sign in (not linked), signing out'); so.click(); }
+      await ec.waitFor(function () { return !/not-linked/i.test(location.pathname); }, 90000, 500);
+      await settle(3000);
+      if (ec.finished) return;
+    }
+    if (/\/login/i.test(location.pathname) && /tradies\.ambrosebuilding/i.test(location.host)) {
+      if ((S.newPressed || 0) >= 2) return ec.fail('pressed Trade Sign In (new) twice and Tradies Web didn\'t go to its sign in page');
+      var nb = tw(/^Trade Sign In \(new\)/i);
+      if (nb) {
+        S.newPressed = (S.newPressed || 0) + 1; if (!S.want && A.url) S.want = A.url; ec.save();
+        ec.log('Tradies Web sign in: pressing Trade Sign In (new)');
+        nb.click();
+        await ec.waitFor(function () { return !/tradies\.ambrosebuilding/i.test(location.host) || !/\/login/i.test(location.pathname); }, 90000, 500);
+        await settle(3000);
+        if (ec.finished) return;
+        return ec.fail('Tradies Web hasn\'t moved on from its sign in page after 90 s', { look: { url: location.href } });
+      }
     }
   }
 
