@@ -31,7 +31,7 @@ ec.run(async function () {
   // a sign in page on some other host (a login server): it's for the site this job came from
   if (site) S.lastSite = site.name;
   else if (A.url && !S.lastSite) { try { var h0 = siteFor(new URL(A.url).host); if (h0) S.lastSite = h0.name; } catch (e) {} }
-  if (!site && S.lastSite && pwBoxNow()) site = SITES.filter(function (s) { return s.name == S.lastSite; })[0];
+  if (!site && S.lastSite && (pwBoxNow() || /login|b2c|auth|account|identity|sso/i.test(location.host))) site = SITES.filter(function (s) { return s.name == S.lastSite; })[0];
   function pwBoxNow() { return [].slice.call(document.querySelectorAll('input[type=password]')).some(ec.visible); }
 
   // ---- small helpers
