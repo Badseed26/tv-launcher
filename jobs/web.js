@@ -491,21 +491,45 @@ ec.run(async function () {
       await settle();
     }
     if (!/^\/PurchaseOrders\/[a-f0-9]{20,}/i.test(location.pathname)) return answer({ did: 'not on a PO page, here\'s where it is', steps: S.amb });
+    if (S.opened) return answer({ did: 'opened ' + S.opened, steps: S.amb }); // the press moved to another page (Tradies Web)
     note('on the PO page');
-    var tab = ec.find({ text: 'bookings', exact: false, sel: 'a, button, [role=tab], li, .nav-link, div.tab, span' }).filter(function (e) { return flat(e.innerText).length < 30; });
-    if (tab.length != 1) return answer({ did: 'found ' + tab.length + ' Bookings tabs on the PO page, have a look', steps: S.amb });
-    await ec.press(tab[0], { shots: false });
-    await settle();
-    note('opened Bookings');
-    var reps = ec.find({ text: 'report', exact: false }).filter(function (e) { return flat(e.innerText).length < 60 && !WEB_BLOCK.test(flat(e.innerText)); });
-    if (reps.length != 1) return answer({ did: reps.length ? reps.length + ' report links under Bookings, pick one (web.press its ref)' : 'no report link under Bookings, have a look', steps: S.amb });
-    note('pressing ' + flat(reps[0].innerText));
-    S.acted = 'report'; ec.save();
-    await ec.press(reps[0], { shots: false });
-    await settle();
-    // it goes on to Tradies Web (this runs again there), or opened in place
-    if (/tradies\.ambrosebuilding/.test(location.host)) return answer({ did: 'on Tradies Web for PO ' + po, steps: S.amb });
-    return answer({ did: 'pressed the report link but it didn\'t go to Tradies Web, have a look', steps: S.amb });
+    // Bookings is a fold-out heading (h5 "Bookings: expand_more"): open it with a script click
+    var head = all('h5, h6, div.pointer, .pointer').filter(function (e) { return /^Bookings:?\s*expand_(more|less)$/i.test(flat(e.innerText)); }).pop();
+    if (!head) return answer({ did: 'no Bookings section on the PO page, have a look', steps: S.amb });
+    if (/expand_more/.test(head.innerText)) { head.click(); await ec.waitFor(function () { return /expand_less/.test(head.innerText); }, 8000, 200); await settle(3000); }
+    // the bookings table: Booking Type, Status, Start Date, End Date, Images, Reports, Open In Tradies
+    var tbl = all('table').filter(function (t) { return /Booking Type/i.test(t.innerText) && /Open In Tradies/i.test(t.innerText); })[0];
+    if (!tbl) return answer({ did: 'Bookings opened but no bookings table, have a look', steps: S.amb });
+    var heads = [].slice.call(tbl.querySelectorAll('th')).map(function (h) { return flat(h.innerText).toLowerCase(); });
+    var col = function (name) { for (var i = 0; i < heads.length; i++) if (heads[i].indexOf(name) >= 0) return i; return -1; };
+    var rows = [].slice.call(tbl.querySelectorAll('tbody tr')).filter(function (r) { return r.querySelectorAll('td').length >= 6; });
+    var books = rows.map(function (r, i) {
+      var td = r.querySelectorAll('td'), get = function (n) { var k = col(n); return k >= 0 && td[k] ? flat(td[k].innerText) : ''; };
+      var next = r.nextElementSibling, cm = next && next.querySelectorAll('td').length < 3 ? flat(next.innerText).replace(/^Comments:\s*/i, '') : '';
+      return { n: i + 1, type: get('booking type'), status: get('status'), start: get('start'), end: get('end'),
+        images: get('images').replace(/^warning\s*/i, ''), report: get('report'), comments: cm };
+    });
+    note(books.length + ' bookings');
+    // open {booking: n, open: 'images' | 'report' | 'tradies'}: press that booking's link (script click, like Ambrose wants)
+    if (A.booking && A.open) {
+      var r0 = rows[Number(A.booking) - 1];
+      if (!r0) return ec.fail('no booking ' + A.booking + ' (there are ' + rows.length + ')', { bookings: books });
+      var which = { images: 'images', report: 'report', tradies: 'open in tradies' }[String(A.open)];
+      if (!which || col(which) < 0) return ec.fail('open wants images, report or tradies');
+      var cell = r0.querySelectorAll('td')[col(which)];
+      var hit = cell.querySelector('a, button, [role=button], .pointer-enabled, .pointer, span') || cell;
+      var said = flat(hit.innerText);
+      if (/^N\/?A$/i.test(said) || !said) return answer({ did: 'booking ' + A.booking + ' has no ' + A.open + ' to open', bookings: books, steps: S.amb });
+      if (WEB_BLOCK.test(said)) return ec.fail('not pressing "' + said + '"');
+      S.opened = A.open + ' on booking ' + A.booking + ' (' + books[A.booking - 1].type + ')'; ec.save();
+      note('opening ' + S.opened);
+      var before = location.href;
+      await ec.press(hit, { script: true, shots: false });
+      await ec.waitFor(function () { return location.href != before || document.querySelector('.blazored-modal'); }, 15000, 300);
+      await settle(4000);
+      return answer({ did: 'opened ' + S.opened, modal: !!document.querySelector('.blazored-modal'), steps: S.amb });
+    }
+    return answer({ did: 'PO ' + po + ': ' + books.length + ' bookings. Open one with booking: n and open: images, report or tradies', bookings: books, steps: S.amb });
   }
 
   if (what == 'web.run') {
