@@ -176,9 +176,14 @@ Ethan wants everything doable from a chat with the PC off, using the TV as the c
   images, report, complete). `{po, booking: n, open: images | report | tradies}` opens that one: images opens the
   Bookings Images box (blazored-modal, file input, "minimum of 2 images", takes PDFs too) ready for web.upload; report
   and tradies are plain links, followed in the tab. Not yet done for real: an upload (no job needed one at the time).
-- Tradies Web sign in (22/11): the page offers Trade Sign In (new, email), (classic, mobile) and Internal. "New" went
-  straight through on the admin Auth0 session but that email isn't linked to a Tradies Web profile ("not linked").
-  Waiting on Ethan to say which button his Tradies Web login uses.
+- Tradies Web sign in (22/11): Ethan's is Trade Sign In (new). Admin and Tradies Web share one Auth0, so after admin
+  the new button signs in as the admin email ("not linked"): web.js signs out, presses new again and fills the saved
+  Tradies Web login (the Auth0 page title says Tradies Web or Tradies Admin). Redirects take up to a minute. Verified
+  22/11: signed in and landed on the booking's safety page.
+- NEVER on Tradies Web: the booking's site safety pages (sign in to site, PSEA, sign off). They're a real on-site record.
+  web.js refuses presses and fills there, and sign on, sign off, acknowledge, attendance and clock in or out are on
+  the press block list. (22/11: the old landing-page rule tried to press that page's SIGN IN; it was covered, so nothing
+  happened. The LOG IN rule is now Ambrose admin's front page only.)
 - `web.steps {steps:[{do:'press',ref:4},{do:'fill',fields:[...]},{do:'wait',text:'Saved'}]}` runs several actions in one
   request (look, press, fill, key, scroll, wait, sleep, shot), carrying on after a page change, stopping at the first
   failure with a look. Use it whenever the next few steps are known, it saves a round trip each.
