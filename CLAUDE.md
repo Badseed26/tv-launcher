@@ -193,6 +193,10 @@ Ethan wants everything doable from a chat with the PC off, using the TV as the c
   web tabs' own cookies and browser name (`supplierCookies`), so they're not slowed by the screen being off, and its waits
   use `window.__ecSleep` (lib). Signed out of a supplier: web.open its page so web.js signs in, then try again. The
   script never saves: Save Quote with web.run after. Tradezone still needs its bot check ticked once by Ethan.
+  Verified 22/11 on build 93 (JN 9530, CNW only): candidates for 11 items 38 s, choose plus apply into the quote's
+  existing folders 19 s (script 0.42 fixed finding those folders), the whole quote (scope, folders, pricing, save,
+  re-read) about 2 min on a clean run against 25 min plus by hand. After Save Quote, wait for the page to come back
+  before opening anything else, or the save gets cut off (a web.open straight after lost the lines once).
 - `RunnerActivity` runs api jobs (kind api) on its PC-size hidden page, full screen while they run, then back to how
   the TV was. With more jobs queued it stays open for them.
 - Verified 21/11 on build 63: tv.ping in ~10 s, aroflo.search "Four Mile" 21 s (signed itself in), aroflo.task 9530
