@@ -82,11 +82,12 @@ window.ec = (function () {
     var r = el.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
     if (cx < 0 || cy < 0 || cx > innerWidth || cy > innerHeight) throw new Error(name + ' is off the page after scrolling (' + Math.round(cx) + ',' + Math.round(cy) + ')');
     var hit = document.elementFromPoint(cx, cy);
-    if (!opt.script && !(hit === el || el.contains(hit) || (hit && hit.contains(el) && hit.tagName == 'LABEL')))
+    if (!opt.script && !opt.jq && !(hit === el || el.contains(hit) || (hit && hit.contains(el) && hit.tagName == 'LABEL')))
       throw new Error('something is sitting on top of ' + name + ': ' + label(hit));
-    ec.log('press ' + name + ' at ' + Math.round(cx) + ',' + Math.round(cy) + (opt.script ? ' (script click)' : ''));
+    ec.log('press ' + name + ' at ' + Math.round(cx) + ',' + Math.round(cy) + (opt.jq ? ' (jQuery click)' : opt.script ? ' (script click)' : ''));
     if (opt.shots !== false) await ec.shot('before ' + name);
-    if (opt.script) el.click(); else api.tap(TOKEN, cx, cy, innerWidth);
+    // jq: AroFlo buttons wired through jQuery (Add Note (HTML) ignores plain clicks). script: a plain script click.
+    if (opt.jq && window.jQuery) jQuery(el).trigger('click'); else if (opt.script) el.click(); else api.tap(TOKEN, cx, cy, innerWidth);
     if (opt.expect) {
       var ok = await ec.waitFor(opt.expect, opt.timeout || 12000);
       if (opt.shots !== false) await ec.shot('after ' + name);
