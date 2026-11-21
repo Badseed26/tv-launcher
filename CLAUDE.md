@@ -210,6 +210,18 @@ the TV keeps a long poll open to it (`Link.java`), so a tool call reaches the TV
   every block on those still applies. If the TV's not connected, the tools say so: use the Todoist remote.
 - Tested 22/11 locally (wrangler dev, fake TV): OAuth, wrong password, bad redirect, PKCE, refresh, pairing, all tools,
   30 to 70 ms per call.
+- Live 22/11 (builds 88 to 92). Fixes it took: this TV's Android 11 doesn't trust the root workers.dev uses, so the app
+  trusts the Mozilla root list for workers.dev only (`res/xml/network_security_config.xml`, `res/raw/relay_roots.pem`;
+  the WebView was fine, it has its own list). Pairing ran on the main thread (Remote's commands run there), so it
+  goes on its own thread now.
+- Screen off = slow pages: the TV in standby makes the Runner's page count as hidden, and its own timers crawl (an
+  0.8 s wait took 21 s). Job code waits go through `ecApi.wake` (the app times them, build 92 on). Looks read
+  textContent, not innerText (200 elements took 20 s). `tv_screen` draws the Runner's page itself
+  (`RunnerActivity.pageJpeg`) so it works with the screen off; `{tv:true}`-less it falls back to the phone page picture.
+- Timed 22/11 over the connector, screen off: a step on an open tab 1.25 s door to door; a fresh CNW page 22 s; a cold
+  AroFlo search (TV in standby) 16 s; tv_status under a second. Updates can be sent with tv_filer update.
+- Build release fix (22/11): `gh release create` sometimes leaves a draft the TV can't see (404 on update). The build
+  now finds the release by its name and publishes it by id, checking it took.
 
 ## AroFlo session limit
 AroFlo caps how many devices can be signed in as one user. When Ethan signs in elsewhere, the TV gets the User
