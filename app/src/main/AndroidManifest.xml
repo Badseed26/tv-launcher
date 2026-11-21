@@ -36,6 +36,7 @@
         android:banner="@drawable/banner"
         android:icon="@drawable/ic_launcher"
         android:label="Home"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:theme="@style/LauncherTheme">
 
         <activity

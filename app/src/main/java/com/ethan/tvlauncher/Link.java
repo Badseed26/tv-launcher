@@ -62,6 +62,7 @@ final class Link {
             r.put("timeout", 20000);
             JSONObject res = new JSONObject(Http.run(r.toString()));
             String body = new String(Base64.decode(res.optString("b64", ""), Base64.DEFAULT), StandardCharsets.UTF_8);
+            if (res.optBoolean("error")) return "Link: couldn't reach the relay (" + res.optString("message") + ")";
             if (res.optInt("status") != 200) return "Link: the relay said no (" + res.optInt("status") + " " + body.replaceAll("\\s+", " ").trim() + ")";
             String key = new JSONObject(body).optString("key");
             if (key.length() < 32) return "Link: the relay didn't send a key back";

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 22/11: this TV's Android 11 doesn't trust the root Cloudflare uses for workers.dev, so the relay link couldn't
+     connect (the WebView has its own newer list, which is why pages could). For the relay's address only, the app
+     also trusts the current Mozilla root list (res/raw/relay_roots.pem). Everything else is unchanged. -->
+<network-security-config>
+    <domain-config>
+        <domain includeSubdomains="true">workers.dev</domain>
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="@raw/relay_roots" />
+        </trust-anchors>
+    </domain-config>
+</network-security-config>
