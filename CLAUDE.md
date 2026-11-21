@@ -123,6 +123,9 @@ Ethan wants everything doable from a chat with the PC off, using the TV as the c
   pages are blocked in lib and in the WebView. Writes must check `ec.dry`.
 - `RunnerActivity` runs api jobs (kind api) on its PC-size hidden page, full screen while they run, then back to how
   the TV was. With more jobs queued it stays open for them.
+- Verified 21/11 on build 63: tv.ping in ~10 s, aroflo.search "Four Mile" 21 s (signed itself in), aroflo.task 9530
+  18 s with the edited 50A note in it. Remote updates on build 62+ wake a standby TV for the install box and put it
+  back to sleep (61 and older couldn't, the install just waited).
 - `Crash.java`: any crash's trace is posted on the remote next start. Two crashes in 10 min = safe mode (api jobs
   paused, everything else runs). A new build or tv.safe {off:true} clears it.
 
