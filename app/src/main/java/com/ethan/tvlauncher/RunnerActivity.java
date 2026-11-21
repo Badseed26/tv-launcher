@@ -1263,6 +1263,45 @@ public class RunnerActivity extends Activity {
         }
     }
 
+    /**
+     * The Runner's page (a job or an open web tab) as a picture, drawn from the page itself so it works with the TV
+     * screen off (22/11, for the connector's tv_screen). Null when there's no page.
+     */
+    static byte[] pageJpeg(int maxW) {
+        final RunnerActivity r = instance;
+        if (r == null) return null;
+        final java.util.concurrent.CountDownLatch done = new java.util.concurrent.CountDownLatch(1);
+        final java.util.concurrent.atomic.AtomicReference<byte[]> out = new java.util.concurrent.atomic.AtomicReference<>();
+        final int mw = maxW;
+        r.handler.post(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    WebView w = r.web;
+                    if (w != null && w.getWidth() > 0) {
+                        int ww = w.getWidth(), hh = w.getHeight();
+                        float k = Math.min(1f, mw / (float) ww);
+                        Bitmap b = Bitmap.createBitmap(Math.round(ww * k), Math.round(hh * k), Bitmap.Config.RGB_565);
+                        android.graphics.Canvas cv = new android.graphics.Canvas(b);
+                        cv.scale(k, k);
+                        w.draw(cv);
+                        java.io.ByteArrayOutputStream o = new java.io.ByteArrayOutputStream();
+                        b.compress(Bitmap.CompressFormat.JPEG, 70, o);
+                        b.recycle();
+                        out.set(o.toByteArray());
+                    }
+                } catch (Throwable ignored) {
+                }
+                done.countDown();
+            }
+        });
+        try {
+            done.await(8, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (InterruptedException ignored) {
+        }
+        return out.get();
+    }
+
     /** A real tap at a point on the page (page pixels), like a finger. AroFlo ignores some script clicks. */
     private void apiTap(float x, float y, float pageWidth) {
         WebView w = web;

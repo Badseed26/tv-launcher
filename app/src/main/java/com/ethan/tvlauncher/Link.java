@@ -219,8 +219,18 @@ final class Link {
             }
             case "status":
                 return local("GET", "/api/status", m());
-            case "screen":
+            case "screen": {
+                // with a job or web tab open, its page (works with the TV screen off); otherwise what's on screen
+                byte[] page = a.optBoolean("tv") ? null : RunnerActivity.pageJpeg(1100);
+                if (page != null) {
+                    JSONObject o = new JSONObject();
+                    o.put("ok", true);
+                    o.put("from", "the Runner's page");
+                    o.put("images", new JSONArray().put(Base64.encodeToString(page, Base64.NO_WRAP)));
+                    return o;
+                }
                 return local("GET", "/api/shot", m());
+            }
             case "tap":
                 return local("POST", "/api/tap", m("x", a.optString("x"), "y", a.optString("y")));
             case "type":
