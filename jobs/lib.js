@@ -23,6 +23,8 @@ window.ec = (function () {
     var o = { ok: false, err: String(msg) }; for (var k in (extra || {})) o[k] = extra[k];
     ec.log('FAIL ' + o.err); api.done(TOKEN, JSON.stringify(o));
   };
+  // A file for the answer (an attachment, say): goes on the remote task as its own comment once the job's done
+  ec.file = function (name, b64, type) { api.file(TOKEN, String(name), String(b64), String(type || '')); };
   ec.sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
   ec.waitFor = async function (fn, ms, every) {
     var t0 = Date.now(); ms = ms || 10000;

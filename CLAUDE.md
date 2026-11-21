@@ -115,12 +115,21 @@ Ethan wants everything doable from a chat with the PC off, using the TV as the c
 - Job code lives in `jobs/` and loads fresh from GitHub on every request (no build needed): `jobs/lib.js` (shared
   helpers) then `jobs/<area>.js`. It runs again on every page the job lands on, with `ec.state` carried over
   (`ec.go(url)` saves it). If a newer copy throws a script error, the TV runs the job once more with the last copy
-  that worked. Areas so far: aroflo (check, search, task, calendar, run). `aroflo.run {js}` runs any bit of code on an
+  that worked. Areas so far: aroflo (check, search, task, calendar, run, plus writes: note.add, note.edit, siteinfo.add, schedule.add, schedule.move), outlook (read only). `aroflo.run {js}` runs any bit of code on an
   AroFlo page and returns the result: use it to look at a page (and `ec.shot`) before writing or fixing a job.
 - Presses: `ec.press(target, {expect, what})` only presses exactly one visible match, scrolls it into view, checks
   nothing's on top, real finger tap in its middle, then waits for `expect`. Pictures before and after go in the
   job's folder. Never pressed: send, submit, pay, delete, archive, reply, forward (ec.BLOCK). Admin and settings
   pages are blocked in lib and in the WebView. Writes must check `ec.dry`.
+- Outlook (build 64 on): `jobs/outlook-hook.js` loads first on every Outlook job page (fresh from GitHub too, the job
+  won't open Outlook without it). It blocks every mailbox write from the page, workers, beacons and graphql mutations, and
+  notes the headers Outlook signs its mail calls with. `jobs/outlook.js` then asks Outlook's mail service directly with
+  Find/Get calls only, never opening an email in the list (that would mark it read). Ops: outlook.check, outlook.search
+  {q, folder, max}, outlook.read {id | q, n}, outlook.attachment {id | q, name | all} (files on the remote task),
+  outlook.run {js} (has svc(action, body), search, getItem). If Outlook's signed out the job says so; the TV never types
+  the Microsoft login.
+- Job code comes from the newest commit on the branch: one GitHub API call for the commit sha (kept 15 s), then the raw
+  file at that sha (not rate limited, never stale). If GitHub's API is rate limited it falls back to the branch's raw file.
 - `RunnerActivity` runs api jobs (kind api) on its PC-size hidden page, full screen while they run, then back to how
   the TV was. With more jobs queued it stays open for them.
 - Verified 21/11 on build 63: tv.ping in ~10 s, aroflo.search "Four Mile" 21 s (signed itself in), aroflo.task 9530

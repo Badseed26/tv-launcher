@@ -804,7 +804,8 @@ public class RunnerActivity extends Activity {
             @Override
             public void onPageFinished(WebView view, String u) {
                 if (view != web || job == null || pageWant == null || bundle == null && !"lookup".equals(job.kind) && !"api".equals(job.kind)) return;
-                if (u != null && u.contains("office.aroflo.com") && !pageRan) {
+                boolean apiPage = job != null && "api".equals(job.kind) && u != null && (u.contains("office.aroflo.com") || u.contains("outlook.") || u.contains("login.microsoftonline.com"));
+                if (u != null && (u.contains("office.aroflo.com") || apiPage) && !pageRan) {
                     handler.postDelayed(new Runnable() {
                         @Override
                         public void run() {
@@ -922,7 +923,8 @@ public class RunnerActivity extends Activity {
             "(?i)(siteadmin|site_admin|/admin/|/administration|usermanagement|/settings/)");
     private static final String JOBS_RAW = "https://raw.githubusercontent.com/Badseed26/tv-launcher/";
     private Job carry;
-    private String apiJs, apiState;
+    private String apiJs, apiState, apiHook;
+    private final java.util.List<String[]> apiFiles = new java.util.ArrayList<>();
     private final StringBuilder apiLog = new StringBuilder();
     private int apiShots, apiRuns;
     private boolean apiRetried;
@@ -941,6 +943,7 @@ public class RunnerActivity extends Activity {
         final String what = req.optString("do"), id = req.optString("id");
         final String area = what.contains(".") ? what.substring(0, what.indexOf('.')) : what;
         apiLog.setLength(0);
+        apiFiles.clear();
         apiState = null;
         apiShots = 0;
         apiRuns = 0;
@@ -954,12 +957,25 @@ public class RunnerActivity extends Activity {
             @Override
             public void run() {
                 final String code = jobCode(area, req.optString("branch", "main"), false);
+                // Outlook jobs: a hook that runs before Outlook's own code, catching its sign-in and blocking every mailbox write
+                apiHook = null;
+                if ("outlook".equals(area)) {
+                    try {
+                        apiHook = jobFile("jobs/outlook-hook.js", req.optString("branch", "main"));
+                    } catch (Exception e) {
+                        apiLine("couldn't get the Outlook hook: " + e.getMessage());
+                    }
+                }
                 handler.post(new Runnable() {
                     @Override
                     public void run() {
                         if (!alive || job != j) return;
                         if (code == null) {
                             apiDone(Api.err("couldn't get the job code for " + area + " from GitHub").toString());
+                            return;
+                        }
+                        if ("outlook".equals(area) && (apiHook == null || !apiHook.contains("ecApiHook"))) {
+                            apiDone(Api.err("no Outlook hook, not opening Outlook without the write block").toString());
                             return;
                         }
                         apiJs = code;
@@ -973,7 +989,7 @@ public class RunnerActivity extends Activity {
                         pageWant = area;
                         pageRan = false;
                         pageAt = System.currentTimeMillis();
-                        startPage(url, null);
+                        startPage(url, apiHook != null ? apiHook.replace("__TOKEN__", token) : null);
                         long max = Math.max(30, Math.min(900, req.optJSONObject("args") != null ? req.optJSONObject("args").optInt("timeout", 180) : 180)) * 1000L;
                         handler.postDelayed(apiTimeout, max);
                     }
@@ -986,7 +1002,39 @@ public class RunnerActivity extends Activity {
     private static String startUrl(String area, JSONObject args) {
         String u = args == null ? "" : args.optString("url");
         if ("aroflo".equals(area)) return u.startsWith("https://office.aroflo.com/") ? u : AF_HOME;
+        if ("outlook".equals(area)) return OUTLOOK;
         return null;
+    }
+
+    private static String shaFor, sha;
+    private static long shaAt;
+
+    /**
+     * A file from the repo at the newest commit on the branch: one GitHub API call for the commit (kept 15 s), then the
+     * raw file at that exact commit, which isn't rate limited and is never a stale copy.
+     */
+    private static String jobFile(String path, String branch) throws Exception {
+        if (sha == null || !branch.equals(shaFor) || System.currentTimeMillis() - shaAt > 15000) {
+            JSONObject r = new JSONObject();
+            r.put("method", "GET");
+            r.put("url", "https://api.github.com/repos/Badseed26/tv-launcher/commits/" + java.net.URLEncoder.encode(branch, "UTF-8"));
+            JSONObject h = new JSONObject();
+            h.put("Accept", "application/vnd.github.sha");
+            h.put("User-Agent", "ec-tv-runner");
+            r.put("headers", h);
+            r.put("timeout", 20000);
+            JSONObject res = new JSONObject(Http.run(r.toString()));
+            String got = res.optInt("status") == 200 ? new String(Base64.decode(res.optString("b64", ""), Base64.DEFAULT), StandardCharsets.UTF_8).trim() : "";
+            if (got.matches("[0-9a-f]{40}")) {
+                sha = got;
+                shaFor = branch;
+                shaAt = System.currentTimeMillis();
+            } else {
+                // rate limited or offline: the branch's raw file (can be up to 5 min old)
+                return Http.get(JOBS_RAW + branch + "/" + path + "?t=" + System.currentTimeMillis(), 20000);
+            }
+        }
+        return Http.get(JOBS_RAW + sha + "/" + path, 20000);
     }
 
     /** jobs/lib.js plus jobs/<area>.js off GitHub (the branch asked for), or the last copy that worked. */
@@ -994,8 +1042,8 @@ public class RunnerActivity extends Activity {
         File good = new File(getFilesDir(), "api-" + area + ".js");
         if (!lastGood) {
             try {
-                String lib = fresh("tv-launcher", "jobs/lib.js", JOBS_RAW + branch + "/jobs/lib.js", branch);
-                String a = fresh("tv-launcher", "jobs/" + area + ".js", JOBS_RAW + branch + "/jobs/" + area + ".js", branch);
+                String lib = jobFile("jobs/lib.js", branch);
+                String a = jobFile("jobs/" + area + ".js", branch);
                 if (lib.contains("window.ec") && a.contains("ec.run")) return lib + "\n" + a;
             } catch (Exception e) {
                 apiLine("couldn't get the job code from GitHub (" + e.getMessage() + "), using the last copy that worked");
@@ -1103,8 +1151,11 @@ public class RunnerActivity extends Activity {
         apiLine((ok ? "OK " : "FAILED ") + r.toString());
         say("api " + req.optString("id") + (ok ? " done" : " failed: " + r.optString("err")), ok ? GOOD : WARN);
         String log = apiLog.toString();
+        final java.util.List<String[]> files = new java.util.ArrayList<>(apiFiles);
+        apiFiles.clear();
         finishJob();
         Api.finished(getApplicationContext(), req, r, log);
+        if (ok) for (String[] f : files) Api.postFile(getApplicationContext(), "api " + req.optString("id") + " file " + f[0], f[0], f[1], f[2]);
     }
 
     private void apiLine(String s) {
@@ -1203,6 +1254,21 @@ public class RunnerActivity extends Activity {
                 @Override
                 public void run() {
                     if (alive && job != null) apiDone(json);
+                }
+            });
+        }
+
+        /** A file for the answer (an email's attachment, say), base64. Goes on the remote task as its own comment. */
+        @JavascriptInterface
+        public void file(String t, final String name, final String b64, final String type) {
+            if (!ok(t) || name == null || b64 == null) return;
+            handler.post(new Runnable() {
+                @Override
+                public void run() {
+                    if (apiFiles.size() < 10) {
+                        apiFiles.add(new String[] {name.replaceAll("[\\\\/:*?\"<>|]+", "_"), b64, type == null ? "application/octet-stream" : type});
+                        apiLine("file " + name + " (" + (b64.length() * 3 / 4 / 1024) + " KB)");
+                    }
                 }
             });
         }

@@ -247,6 +247,27 @@ final class Api {
         }, "api-post").start();
     }
 
+    /** One file (base64) as its own comment on the remote task. */
+    static void postFile(final Context c, final String line, final String name, final String b64, final String type) {
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                String token = Secrets.get(c, Secrets.TODOIST_TOKEN);
+                if (token == null) return;
+                try {
+                    JSONObject att = upload(token, Base64.decode(b64, Base64.DEFAULT), name, type);
+                    JSONObject b = new JSONObject();
+                    b.put("task_id", Remote.TASK);
+                    b.put("content", "TV: " + line + (att == null ? " (upload failed)" : ""));
+                    if (att != null) b.put("attachment", att);
+                    Http.todoist(token, "POST", "comments", b);
+                } catch (Exception e) {
+                    TvLog.line(c, "api: couldn't post a file: " + e.getMessage());
+                }
+            }
+        }, "api-file").start();
+    }
+
     /** Todoist upload (raw body). Null if it didn't work. */
     static JSONObject upload(String token, byte[] data, String name, String type) {
         try {
