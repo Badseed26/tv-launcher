@@ -105,6 +105,28 @@ ec.run(async function () {
     }
   }
 
+  // ---- a landing page with just a LOG IN button (Ambrose admin, 21/11): press it to get to the sign in page
+  if (site && !pwBox() && !S.landed) {
+    var lb = all('a, button').filter(vis).filter(function (e) { return /^\s*(log ?in|sign ?in)\s*$/i.test(e.innerText || ''); });
+    var appUp = all('input[type=search], table tbody tr, nav a[href*="Purchase"]').some(vis);
+    if (lb.length == 1 && !appUp) {
+      S.landed = true; S.lastSite = site.name;
+      if (!S.want && A.url) S.want = A.url;
+      ec.save();
+      ec.log('landing page, pressing ' + ec.label(lb[0]));
+      await ec.press(lb[0], { shots: false });
+      await settle(6000);
+      if (ec.finished) return;
+      // same page changed in place: carry on below with the new page
+      site = siteFor(location.host) || site;
+    }
+  }
+  // Microsoft's "Stay signed in?" after a sign in: yes, so it lasts
+  if (/Stay signed in\?/i.test(ec.text().slice(0, 2000))) {
+    var yes = all('input[type=submit], button').filter(vis).filter(function (e) { return /^yes$/i.test(flat(e.value || e.innerText)); });
+    if (yes.length == 1) { ec.log('Stay signed in: yes'); await ec.press(yes[0], { shots: false, script: true }); await settle(6000); if (ec.finished) return; }
+  }
+
   // ---- supplier and Ambrose sign in: the TV fills the login Ethan saved on the phone page
   var onLoginPage = !!pwBox() || (site && site.login && location.href.indexOf(site.login) == 0) ||
     (S.loginStep && all('input[type=email],input[type=text]').some(vis) && /sign ?in|log ?in/i.test(ec.text().slice(0, 3000)));
