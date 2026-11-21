@@ -486,7 +486,8 @@ ec.run(async function () {
       if (!pick) return answer({ did: rows.length ? rows.length + ' POs start with ' + base + ', pick one (web.press its ref)' : 'PO ' + po + ' isn\'t on the PO list (try Invoices or Paid Invoices)', steps: S.amb });
       note('found PO ' + rowText(pick).slice(0, 80));
       var cell = pick.querySelector('.pointer-enabled') || pick.querySelector('td');
-      await ec.press(cell, { expect: function () { return /^\/PurchaseOrders\/[a-f0-9]{20,}/i.test(location.pathname); }, what: 'the PO page to open', timeout: 20000, shots: false });
+      // a script click like the jump script (a real tap on the row doesn't open it, 22/11)
+      await ec.press(cell, { script: true, expect: function () { return /^\/PurchaseOrders\/[a-f0-9]{20,}/i.test(location.pathname); }, what: 'the PO page to open', timeout: 20000, shots: false });
       await settle();
     }
     if (!/^\/PurchaseOrders\/[a-f0-9]{20,}/i.test(location.pathname)) return answer({ did: 'not on a PO page, here\'s where it is', steps: S.amb });
