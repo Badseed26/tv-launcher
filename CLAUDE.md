@@ -170,6 +170,15 @@ Ethan wants everything doable from a chat with the PC off, using the TV as the c
   {files:[{path, name, comment}], ref}` (or a step) puts AroFlo files into the open page's upload box: the app fetches
   each with the TV's AroFlo sign in (`ecApi.grab`, AroFlo only, 16 MB tops), batches of 4, and on Ambrose's image box
   waits for each batch then saves each card's comment (only when the cards line up exactly). Build 80 on.
+- Ambrose admin, tested 22/11 on PO 20332055 (JN 9518): landing page LOG IN, then Auth0 (acg.au.auth0.com, email
+  step then password step) signed in by itself. The PO row only opens with a script click (a real tap doesn't). The PO
+  page's Bookings is a fold-out h5; `web.ambrose {po}` opens it and lists each booking (type, status, start, end,
+  images, report, complete). `{po, booking: n, open: images | report | tradies}` opens that one: images opens the
+  Bookings Images box (blazored-modal, file input, "minimum of 2 images", takes PDFs too) ready for web.upload; report
+  and tradies are plain links, followed in the tab. Not yet done for real: an upload (no job needed one at the time).
+- Tradies Web sign in (22/11): the page offers Trade Sign In (new, email), (classic, mobile) and Internal. "New" went
+  straight through on the admin Auth0 session but that email isn't linked to a Tradies Web profile ("not linked").
+  Waiting on Ethan to say which button his Tradies Web login uses.
 - `web.steps {steps:[{do:'press',ref:4},{do:'fill',fields:[...]},{do:'wait',text:'Saved'}]}` runs several actions in one
   request (look, press, fill, key, scroll, wait, sleep, shot), carrying on after a page change, stopping at the first
   failure with a look. Use it whenever the next few steps are known, it saves a round trip each.
