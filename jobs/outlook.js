@@ -75,7 +75,6 @@ ec.run(async function () {
     var item = typeof f == 'string' ? { __type: 'PropertyUri:#Exchange', FieldURI: f } : f;
     return { __type: 'Contains:#Exchange', ContainmentMode: 'Substring', ContainmentComparison: 'IgnoreCase', Item: item, Constant: { __type: 'ConstantValueType:#Exchange', Value: String(v) } };
   }
-  function ext(tag) { return { __type: 'ExtendedPropertyUri:#Exchange', PropertyTag: tag, PropertyType: 'String' }; }
   function or(list) { return list.length == 1 ? list[0] : { __type: 'Or:#Exchange', Items: list }; }
   function parse(q, o) {
     o = o || {};
@@ -95,27 +94,28 @@ ec.run(async function () {
     var all = [];
     if (o.q) all.push(or([con('Subject', o.q), con('Body', o.q)]));
     if (o.subject) all.push(con('Subject', o.subject));
-    if (o.from) all.push(or([con(ext('0x0C1A'), o.from), con(ext('0x0C1F'), o.from), con(ext('0x0042'), o.from), con(ext('0x0065'), o.from)]));
     if (o.since) all.push({ __type: 'IsGreaterThanOrEqualTo:#Exchange', Item: { __type: 'PropertyUri:#Exchange', FieldURI: 'DateTimeReceived' },
       FieldURIOrConstant: { __type: 'FieldURIOrConstantType:#Exchange', Item: { __type: 'ConstantValueType:#Exchange', Value: day(o.since) } } });
     if (!all.length) return null;
     return { __type: 'RestrictionType:#Exchange', Item: all.length == 1 ? all[0] : { __type: 'And:#Exchange', Items: all } };
   }
-  async function findIn(folder, r, max) {
+  async function findIn(folder, r, max, offset) {
     var body = {
       __type: 'FindItemRequest:#Exchange',
       ItemShape: { __type: 'ItemResponseShape:#Exchange', BaseShape: 'Default' },
       ParentFolderIds: [{ __type: 'DistinguishedFolderId:#Exchange', Id: folder }],
       Traversal: 'Shallow',
-      Paging: { __type: 'IndexedPageView:#Exchange', BasePoint: 'Beginning', Offset: 0, MaxEntriesReturned: max },
+      Paging: { __type: 'IndexedPageView:#Exchange', BasePoint: 'Beginning', Offset: offset || 0, MaxEntriesReturned: max },
       SortOrder: [{ __type: 'SortResults:#Exchange', Order: 'Descending', Path: { __type: 'PropertyUri:#Exchange', FieldURI: 'DateTimeReceived' } }]
     };
     if (r) body.Restriction = r;
     var res = await svc('FindItem', body);
     var rf = res.msg && res.msg.RootFolder;
     return { total: rf ? rf.TotalItemsInView : 0, items: ((rf && rf.Items) || []).map(function (x) {
-      return { id: x.ItemId && x.ItemId.Id, folder: folder, when: x.DateTimeReceived || x.DateTimeSent, from: who(x.From), to: x.DisplayTo || '', subj: x.Subject || '',
-        unread: x.IsRead === false, att: !!x.HasAttachments, prev: String(x.Preview || '').slice(0, 160) };
+      var o = { id: x.ItemId && x.ItemId.Id, folder: folder, when: x.DateTimeReceived || x.DateTimeSent, from: who(x.From), subj: x.Subject || '',
+        unread: x.IsRead === false, att: !!x.HasAttachments };
+      if (x.DisplayTo) o.to = x.DisplayTo;
+      return o;
     }) };
   }
   async function search(q, folder, max, extra) {
@@ -126,7 +126,19 @@ ec.run(async function () {
     max = Math.min(Number(max) || 25, 100);
     var o = parse(q, extra ? JSON.parse(JSON.stringify(extra)) : {});
     var r = restriction(o), out = [], total = 0;
-    for (var i = 0; i < list.length; i++) { var got = await findIn(list[i], r, max); total += got.total; out = out.concat(got.items); }
+    // Exchange won't match on the sender in a restriction, so with from: it pages through (up to 500 a folder, newest
+    // first) and keeps the ones whose sender name or address has it
+    var fm = o.from ? String(o.from).toLowerCase() : null;
+    for (var i = 0; i < list.length; i++) {
+      if (!fm) { var got = await findIn(list[i], r, max); total += got.total; out = out.concat(got.items); continue; }
+      var kept = 0;
+      for (var off = 0; off < 500 && kept < max; off += 100) {
+        var pg = await findIn(list[i], r, 100, off);
+        pg.items.forEach(function (x) { if (x.from.toLowerCase().indexOf(fm) >= 0 && kept < max) { out.push(x); kept++; } });
+        if (pg.items.length < 100) break;
+      }
+      total += kept;
+    }
     out.sort(function (a, b) { return String(b.when).localeCompare(String(a.when)); });
     search.total = total;
     return out.slice(0, max);
