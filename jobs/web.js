@@ -123,7 +123,7 @@ ec.run(async function () {
     return ++window.__ecRef;
   };
   // Web pages get a wider block than lib's: anything that sends, submits, pays or finalises is Ethan's to press
-  var WEB_BLOCK = /\b(submit|send|pay|payment|checkout|check out|place order|confirm order|purchase|buy now|lodge|finali[sz]e|complete report|mark (as )?complete|delete|archive|reply|forward|unsubscribe)\b/i;
+  var WEB_BLOCK = /\b(submit|send|pay|payment|checkout|check out|place order|confirm order|complete purchase|purchase now|buy now|lodge|finali[sz]e|complete report|mark (as )?complete|delete|archive|reply|forward|unsubscribe)\b/i;
   var shown = function (el) {
     if (vis(el)) return true;
     // a styled tick box: the real input is hidden behind its label
@@ -168,6 +168,7 @@ ec.run(async function () {
     if (o.find) { var f = String(o.find).toLowerCase(); list = list.filter(function (x) { return x.toLowerCase().indexOf(f) >= 0; }); }
     var text = ec.text(), chars = Math.min(Number(o.chars) || 1500, 20000);
     return { url: location.href.replace(/[?#].*$/, '') + (location.hash && location.hash.length < 80 ? location.hash : ''), title: document.title.slice(0, 90),
+      frames: all('iframe').filter(vis).length || undefined,
       text: text.slice(0, chars), more: Math.max(0, text.length - chars), els: list.slice(0, Number(o.max) || 150), elsMore: Math.max(0, list.length - (Number(o.max) || 150)) };
   };
   var target = function (a) {
