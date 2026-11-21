@@ -723,9 +723,7 @@ public class FilerActivity extends Activity {
 
     /**
      * 19/11. Outlook signed out for 10 min: a follow up, since nothing gets filed till it's back. AroFlo bumped by the
-     * session limit (you signed in as yourself somewhere else): it only takes AroFlo back when there's AroFlo work waiting.
-     * Nights and weekends it presses CONTINUE itself (at most every 20 min); in work hours you get a follow up instead, so it
-     * never logs you out of AroFlo while you're using it.
+     * session limit: it presses CONTINUE itself any time (21/11, the TV taking the spot doesn't sign Ethan's PC or phone out).
      */
     private void watchSignIns() {
         long now = System.currentTimeMillis();
@@ -747,18 +745,12 @@ public class FilerActivity extends Activity {
         }
         if (aroOutSince == 0) aroOutSince = now;
         if ("Session limit".equals(aroflo.state)) {
-            if (!aroWorkWaiting()) return;
-            if (quietHours()) {
-                if (now - lastAutoContinue > 20 * 60000) {
-                    lastAutoContinue = now;
-                    log("AroFlo: work waiting and it's after hours, pressing CONTINUE");
-                    pressOnAroFlo("CONTINUE");
-                }
-            } else {
-                Alerts.raise(this, "aroflo-limit", "TV: AroFlo work waiting, press Continue",
-                        "Something else signed into AroFlo as you, so the TV's AroFlo got bumped, and the filer has AroFlo work "
-                                + "waiting. Press Continue on the dashboard's TV remote when you're not using AroFlo (it logs out "
-                                + "your other AroFlo session). After hours the TV presses it itself.");
+            // 21/11: the TV taking the spot doesn't sign Ethan's PC or phone out of AroFlo, so it just presses
+            // CONTINUE any time it's bumped (at most every 10 min), day or night.
+            if (now - lastAutoContinue > 10 * 60000) {
+                lastAutoContinue = now;
+                log("AroFlo: User Session Limit page, pressing CONTINUE");
+                pressOnAroFlo("CONTINUE");
             }
         } else if (aroflo.state.startsWith("Sign-in failed") && now - aroOutSince > 10 * 60000) {
             Alerts.raise(this, "aroflo-out", "TV: AroFlo sign-in failed on the TV",
@@ -925,7 +917,7 @@ public class FilerActivity extends Activity {
         if (outlook.state.startsWith("Approve sign-in: ")) {
             note = "Microsoft sign-in: enter " + outlook.state.substring(17) + " on your phone";
         } else if ("Session limit".equals(aroflo.state)) {
-            note = "AroFlo session limit: continuing signs out one of your other devices. Confirm from AirHQ";
+            note = "AroFlo session limit: the TV presses Continue itself";
         } else if ("Needs code".equals(aroflo.state)) {
             note = "AroFlo wants a code: send it from AirHQ";
         }

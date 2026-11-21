@@ -26,7 +26,7 @@ final class Remote {
     /** After a command comes in, check every 3 s for 5 min so back and forth is quick (21/11), then back to 20 s. */
     private static final long FAST_MS = 3000, FAST_FOR = 5 * 60 * 1000;
     private volatile long fastUntil;
-    private static final String HELP = "Commands: wake, open filer, close filer, status, log, reload, press <button text>, code <number>, stay awake on, stay awake off, update, web remote, web remote new pin, check mail, test mail check, mail check on, mail check off, mail check opens on, mail check opens off, inbox pull <day>, lookup <terms; ...>";
+    private static final String HELP = "Commands: wake, open filer, close filer, status, log, reload, press <button text>, code <number>, stay awake on, stay awake off, update, web remote, web remote new pin, check mail, test mail check, mail check on, mail check off, mail check opens on, mail check opens off, inbox pull <day>, lookup <terms; ...>, tv code, weather <town>, api {json}";
 
     private static Remote inst;
 
@@ -178,7 +178,10 @@ final class Remote {
                 android.os.PowerManager pm = (android.os.PowerManager) c.getSystemService(Context.POWER_SERVICE);
                 boolean screenOn = pm != null && pm.isInteractive();
                 String reply;
-                if (lc.equals("wake") || lc.equals("turn on")) {
+                if (lc.startsWith("api ") || lc.startsWith("api{")) {
+                    // Claude's API (21/11): JSON in, JSON back, see Api.java
+                    reply = Api.request(c, cmd.trim().substring(3));
+                } else if (lc.equals("wake") || lc.equals("turn on")) {
                     ListenService.wakeScreen(c);
                     // Try 2: a screen that asks Android to switch the TV on as it opens
                     if (!screenOn) WakeActivity.start(c, false);

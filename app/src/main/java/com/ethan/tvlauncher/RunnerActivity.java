@@ -80,11 +80,19 @@ public class RunnerActivity extends Activity {
     static final class Job {
         String kind, day, from;
         List<String> terms;
+        /** kind api: the request off the remote (see Api). */
+        JSONObject api;
         Remote.Say say;
         boolean wasOff, filerWasOpen;
     }
 
     private static Job pending;
+
+    /** True while a job's running. */
+    static boolean busy() {
+        RunnerActivity r = instance;
+        return r != null && r.job != null;
+    }
 
     // ---------------------------------------------------------------- starting
 
@@ -186,6 +194,7 @@ public class RunnerActivity extends Activity {
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
+        Crash.install(this);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         if (Build.VERSION.SDK_INT >= 27) {
             setTurnScreenOn(true);
@@ -388,6 +397,10 @@ public class RunnerActivity extends Activity {
         bundle = null;
         pullLine = null;
         dayRow.setVisibility(View.GONE);
+        if ("api".equals(j.kind)) {
+            beginApi(j);
+            return;
+        }
         if ("lookup".equals(j.kind)) {
             title.setText("Runner  ·  AroFlo lookup");
             setNow("Looking up " + j.terms.size() + " in AroFlo...");
@@ -567,6 +580,10 @@ public class RunnerActivity extends Activity {
     private void runAf() {
         if (pageRan || web == null) return;
         pageRan = true;
+        if ("api".equals(job.kind)) {
+            runApi();
+            return;
+        }
         JSONObject j = new JSONObject();
         try {
             if ("lookup".equals(job.kind)) {
@@ -643,9 +660,15 @@ public class RunnerActivity extends Activity {
         setNow("Done.");
         dayRow.setVisibility(View.VISIBLE);
         if ("tv".equals(j.from) && !j.wasOff) return;
+        // more api jobs waiting: stay open for them, keeping how the TV was before the first one
+        if ("api".equals(j.kind) && Api.hasNext(this)) {
+            carry = j;
+            return;
+        }
         handler.postDelayed(new Runnable() {
             @Override
             public void run() {
+                if (job != null) return; // another job started in the meantime
                 if (j.filerWasOpen) {
                     Intent i = new Intent(RunnerActivity.this, FilerActivity.class);
                     i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -750,6 +773,7 @@ public class RunnerActivity extends Activity {
         if (Build.VERSION.SDK_INT >= 26) w.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false);
         w.addJavascriptInterface(new Bridge(), "ecRun");
         w.addJavascriptInterface(new GmBridge(), "ecGmBridge");
+        w.addJavascriptInterface(new ApiBridge(), "ecApi");
         if (inject != null && WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
             HashSet<String> origins = new HashSet<>();
             for (String o : OUTLOOK_ORIGINS) origins.add(o);
@@ -761,14 +785,25 @@ public class RunnerActivity extends Activity {
         w.setWebChromeClient(new WebChromeClient());
         w.setWebViewClient(new WebViewClient() {
             @Override
+            public boolean shouldOverrideUrlLoading(WebView view, android.webkit.WebResourceRequest req) {
+                // api jobs never go near admin or settings areas (21/11)
+                String u = String.valueOf(req.getUrl());
+                if (job != null && "api".equals(job.kind) && BLOCKED.matcher(u).find()) {
+                    apiLine("BLOCKED: tried to open " + u.replaceAll("[?#].*$", ""));
+                    return true;
+                }
+                return false;
+            }
+
+            @Override
             public void onPageStarted(WebView view, String u, Bitmap favicon) {
                 // a notes lookup moves on to each task page: run the script again on each one
-                if (view == web && job != null && "lookup".equals(job.kind)) pageRan = false;
+                if (view == web && job != null && ("lookup".equals(job.kind) || "api".equals(job.kind))) pageRan = false;
             }
 
             @Override
             public void onPageFinished(WebView view, String u) {
-                if (view != web || job == null || pageWant == null || bundle == null && !"lookup".equals(job.kind)) return;
+                if (view != web || job == null || pageWant == null || bundle == null && !"lookup".equals(job.kind) && !"api".equals(job.kind)) return;
                 if (u != null && u.contains("office.aroflo.com") && !pageRan) {
                     handler.postDelayed(new Runnable() {
                         @Override
@@ -880,6 +915,299 @@ public class RunnerActivity extends Activity {
         }
     }
 
+
+    // ---------------------------------------------------------------- api jobs (21/11, see Api.java)
+
+    private static final java.util.regex.Pattern BLOCKED = java.util.regex.Pattern.compile(
+            "(?i)(siteadmin|site_admin|/admin/|/administration|usermanagement|/settings/)");
+    private static final String JOBS_RAW = "https://raw.githubusercontent.com/Badseed26/tv-launcher/";
+    private Job carry;
+    private String apiJs, apiState;
+    private final StringBuilder apiLog = new StringBuilder();
+    private int apiShots, apiRuns;
+    private boolean apiRetried;
+
+    private void beginApi(final Job j) {
+        if (carry != null) {
+            j.wasOff = carry.wasOff;
+            j.filerWasOpen = carry.filerWasOpen;
+            carry = null;
+        }
+        final JSONObject req = j.api;
+        try {
+            req.put("started", started);
+        } catch (Exception ignored) {
+        }
+        final String what = req.optString("do"), id = req.optString("id");
+        final String area = what.contains(".") ? what.substring(0, what.indexOf('.')) : what;
+        apiLog.setLength(0);
+        apiState = null;
+        apiShots = 0;
+        apiRuns = 0;
+        apiRetried = false;
+        title.setText("Runner  ·  api " + what);
+        setNow("api " + id + ": getting the job code...");
+        say("api " + id + ": " + what + (req.optBoolean("dry") ? " (dry run)" : ""), DIM);
+        apiLine("job " + id + " " + what + " args " + req.optJSONObject("args") + (req.optBoolean("dry") ? " DRY RUN" : "")
+                + " branch " + req.optString("branch", "main") + " build " + Updater.currentVersion(this));
+        net.execute(new Runnable() {
+            @Override
+            public void run() {
+                final String code = jobCode(area, req.optString("branch", "main"), false);
+                handler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (!alive || job != j) return;
+                        if (code == null) {
+                            apiDone(Api.err("couldn't get the job code for " + area + " from GitHub").toString());
+                            return;
+                        }
+                        apiJs = code;
+                        String url = startUrl(area, req.optJSONObject("args"));
+                        if (url == null) {
+                            apiDone(Api.err("nothing on the TV knows how to do " + what).toString());
+                            return;
+                        }
+                        apiLine("open " + url.replaceAll("[?#].*$", ""));
+                        setNow("api " + id + ": opening " + area + "...");
+                        pageWant = area;
+                        pageRan = false;
+                        pageAt = System.currentTimeMillis();
+                        startPage(url, null);
+                        long max = Math.max(30, Math.min(900, req.optJSONObject("args") != null ? req.optJSONObject("args").optInt("timeout", 180) : 180)) * 1000L;
+                        handler.postDelayed(apiTimeout, max);
+                    }
+                });
+            }
+        });
+    }
+
+    /** Where a job starts. AroFlo only for now; more areas get added here and as files in jobs/. */
+    private static String startUrl(String area, JSONObject args) {
+        String u = args == null ? "" : args.optString("url");
+        if ("aroflo".equals(area)) return u.startsWith("https://office.aroflo.com/") ? u : AF_HOME;
+        return null;
+    }
+
+    /** jobs/lib.js plus jobs/<area>.js off GitHub (the branch asked for), or the last copy that worked. */
+    private String jobCode(String area, String branch, boolean lastGood) {
+        File good = new File(getFilesDir(), "api-" + area + ".js");
+        if (!lastGood) {
+            try {
+                String lib = fresh("tv-launcher", "jobs/lib.js", JOBS_RAW + branch + "/jobs/lib.js", branch);
+                String a = fresh("tv-launcher", "jobs/" + area + ".js", JOBS_RAW + branch + "/jobs/" + area + ".js", branch);
+                if (lib.contains("window.ec") && a.contains("ec.run")) return lib + "\n" + a;
+            } catch (Exception e) {
+                apiLine("couldn't get the job code from GitHub (" + e.getMessage() + "), using the last copy that worked");
+            }
+        }
+        try {
+            if (good.exists()) return read(new java.io.FileInputStream(good));
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    private void keepGood(String area, String code) {
+        try {
+            FileWriter w = new FileWriter(new File(getFilesDir(), "api-" + area + ".js"), false);
+            w.write(code);
+            w.close();
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** Runs the job code on each page it lands on, with the state it saved before the page changed. */
+    private void runApi() {
+        if (web == null || job == null) return;
+        apiRuns++;
+        if (apiRuns > 40) {
+            apiDone(Api.err("went through 40 pages without finishing, stopped").toString());
+            return;
+        }
+        JSONObject jj = new JSONObject();
+        try {
+            JSONObject req = job.api;
+            jj.put("id", req.optString("id"));
+            jj.put("do", req.optString("do"));
+            jj.put("args", req.optJSONObject("args") != null ? req.optJSONObject("args") : new JSONObject());
+            jj.put("dry", req.optBoolean("dry"));
+            jj.put("n", apiRuns);
+            jj.put("state", apiState != null ? new JSONObject(apiState) : new JSONObject());
+        } catch (Exception ignored) {
+        }
+        String u = String.valueOf(web.getUrl()).replaceAll("[?#].*$", "");
+        apiLine("page " + apiRuns + ": " + u);
+        setNow("api " + job.api.optString("id") + ": working on " + u.replaceAll("^https://[^/]+", ""));
+        web.evaluateJavascript(apiJs.replace("__TOKEN__", token).replace("__JOB__", jj.toString()), null);
+    }
+
+    private final Runnable apiTimeout = new Runnable() {
+        @Override
+        public void run() {
+            if (!alive || job == null || !"api".equals(job.kind)) return;
+            apiShot("timed out");
+            handler.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    if (alive && job != null && "api".equals(job.kind))
+                        apiDone(Api.err("timed out on " + (web == null ? "no page" : String.valueOf(web.getUrl()).replaceAll("[?#].*$", ""))
+                                + (apiState != null ? ", got as far as " + apiState : "")).toString());
+                }
+            }, 1500);
+        }
+    };
+
+    /** tv.cancel on the running job. */
+    void cancelApi() {
+        if (job != null && "api".equals(job.kind)) apiDone(Api.err("cancelled").toString());
+    }
+
+    private void apiDone(String json) {
+        if (job == null || !"api".equals(job.kind)) return;
+        handler.removeCallbacks(apiTimeout);
+        JSONObject r;
+        try {
+            r = new JSONObject(json);
+        } catch (Exception e) {
+            r = Api.err("bad answer from the job code: " + json);
+        }
+        final Job j = job;
+        final JSONObject req = j.api;
+        final String what = req.optString("do"), area = what.contains(".") ? what.substring(0, what.indexOf('.')) : what;
+        // the job code itself fell over: run it once more with the last copy that worked
+        if (r.optBoolean("crash") && !apiRetried) {
+            final String old = jobCode(area, "main", true);
+            if (old != null && !old.equals(apiJs)) {
+                apiRetried = true;
+                apiLine("job code crashed (" + r.optString("err") + "), trying again with the last copy that worked");
+                apiJs = old;
+                apiState = null;
+                apiRuns = 0;
+                stopPage();
+                pageWant = area;
+                pageRan = false;
+                startPage(startUrl(area, req.optJSONObject("args")), null);
+                handler.postDelayed(apiTimeout, 180000);
+                return;
+            }
+        }
+        boolean ok = r.optBoolean("ok") && !r.has("err");
+        if (ok && !apiRetried && apiJs != null) keepGood(area, apiJs);
+        if (apiRetried) {
+            try {
+                r.put("note", "the newest job code crashed, this answer came from the last copy that worked");
+            } catch (Exception ignored) {
+            }
+        }
+        apiLine((ok ? "OK " : "FAILED ") + r.toString());
+        say("api " + req.optString("id") + (ok ? " done" : " failed: " + r.optString("err")), ok ? GOOD : WARN);
+        String log = apiLog.toString();
+        finishJob();
+        Api.finished(getApplicationContext(), req, r, log);
+    }
+
+    private void apiLine(String s) {
+        apiLog.append(new SimpleDateFormat("h:mm:ss a", Locale.US).format(new Date())).append("  ").append(s).append('\n');
+        if (apiLog.length() > 200000) apiLog.delete(0, 50000);
+    }
+
+    /** A small picture of the job's page, kept with the job (Api.dir). */
+    private void apiShot(String label) {
+        WebView w = web;
+        if (w == null || job == null || job.api == null || w.getWidth() == 0) return;
+        try {
+            int ww = w.getWidth(), hh = w.getHeight();
+            float k = Math.min(1f, 900f / ww);
+            Bitmap b = Bitmap.createBitmap(Math.round(ww * k), Math.round(hh * k), Bitmap.Config.RGB_565);
+            android.graphics.Canvas cv = new android.graphics.Canvas(b);
+            cv.scale(k, k);
+            w.draw(cv);
+            apiShots++;
+            String name = String.format(Locale.US, "%02d-%s.jpg", apiShots, label.replaceAll("[^A-Za-z0-9]+", "-").replaceAll("^-|-$", ""));
+            if (name.length() > 60) name = name.substring(0, 56) + ".jpg";
+            java.io.FileOutputStream o = new java.io.FileOutputStream(new File(Api.dir(this, job.api.optString("id")), name));
+            b.compress(Bitmap.CompressFormat.JPEG, 65, o);
+            o.close();
+            b.recycle();
+            apiLine("picture " + name);
+        } catch (Throwable e) {
+            apiLine("picture failed: " + e.getMessage());
+        }
+    }
+
+    /** A real tap at a point on the page (page pixels), like a finger. AroFlo ignores some script clicks. */
+    private void apiTap(float x, float y, float pageWidth) {
+        WebView w = web;
+        if (w == null || pageWidth <= 0) return;
+        float k = w.getWidth() / pageWidth, px = x * k, py = y * k;
+        long down = android.os.SystemClock.uptimeMillis();
+        android.view.MotionEvent d = android.view.MotionEvent.obtain(down, down, android.view.MotionEvent.ACTION_DOWN, px, py, 0);
+        d.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);
+        w.dispatchTouchEvent(d);
+        d.recycle();
+        android.view.MotionEvent u = android.view.MotionEvent.obtain(down, down + 70, android.view.MotionEvent.ACTION_UP, px, py, 0);
+        u.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);
+        w.dispatchTouchEvent(u);
+        u.recycle();
+    }
+
+    /** What the job code can ask of the TV. Every call carries the job's token, so only our page can use it. */
+    private final class ApiBridge {
+        private boolean ok(String t) {
+            return alive && token.equals(t) && job != null && "api".equals(job.kind);
+        }
+
+        @JavascriptInterface
+        public void log(String t, final String s) {
+            if (!ok(t)) return;
+            handler.post(new Runnable() {
+                @Override
+                public void run() {
+                    apiLine(s.length() > 2000 ? s.substring(0, 2000) + "..." : s);
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void save(String t, String state) {
+            if (ok(t)) apiState = state;
+        }
+
+        @JavascriptInterface
+        public void shot(String t, final String label) {
+            if (!ok(t)) return;
+            handler.post(new Runnable() {
+                @Override
+                public void run() {
+                    apiShot(label);
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void tap(String t, final float x, final float y, final float pageWidth) {
+            if (!ok(t)) return;
+            handler.post(new Runnable() {
+                @Override
+                public void run() {
+                    apiTap(x, y, pageWidth);
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void done(String t, final String json) {
+            if (!ok(t)) return;
+            handler.post(new Runnable() {
+                @Override
+                public void run() {
+                    if (alive && job != null) apiDone(json);
+                }
+            });
+        }
+    }
+
     // ---------------------------------------------------------------- bits
 
     /** Newest Inbox Pull from GitHub (kept on the TV), or the last good copy. */
@@ -907,10 +1235,14 @@ public class RunnerActivity extends Activity {
      * server can hand out the old copy for 5 min). Falls back to the raw file.
      */
     private static String fresh(String repo, String path, String rawUrl) throws Exception {
+        return fresh(repo, path, rawUrl, "main");
+    }
+
+    private static String fresh(String repo, String path, String rawUrl, String ref) throws Exception {
         try {
             JSONObject r = new JSONObject();
             r.put("method", "GET");
-            r.put("url", "https://api.github.com/repos/Badseed26/" + repo + "/contents/" + path + "?ref=main");
+            r.put("url", "https://api.github.com/repos/Badseed26/" + repo + "/contents/" + path + "?ref=" + java.net.URLEncoder.encode(ref, "UTF-8"));
             JSONObject h = new JSONObject();
             h.put("Accept", "application/vnd.github.raw");
             h.put("User-Agent", "ec-tv-runner");

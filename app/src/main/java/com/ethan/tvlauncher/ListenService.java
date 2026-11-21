@@ -75,6 +75,7 @@ public class ListenService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        Crash.install(this); // crash traces to Todoist, safe mode after 2 crashes (21/11)
         RemoteServer.start(this); // the phone remote page, over Tailscale
         HandlerThread t = new HandlerThread("listen-beat");
         t.start();
@@ -99,6 +100,8 @@ public class ListenService extends Service {
         startForeground(1, n);
         applyLock();
         Remote.start(this);
+        Crash.report(this);
+        Api.kick(this);
         return START_STICKY;
     }
 
@@ -137,6 +140,7 @@ public class ListenService extends Service {
             }
             peekIfDue(on);
             queueIfDue(on);
+            Api.kick(ListenService.this); // api jobs waiting for the TV to be free
             if (now - Status.lastWrite > 5 * 60000) Status.write(ListenService.this, null);
             bg.postDelayed(this, 60000);
         }

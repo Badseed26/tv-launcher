@@ -102,11 +102,34 @@ This repo is **public**: never put logins, PINs, tokens, IP addresses or the bus
   from standby. `BootReceiver`: starts the listener on boot. `TvLog`: the TV's own log (`log` when the Filer's closed).
 - Device lock with the PC: Todoist task `6j3H69rH7Cj9858X`. Only one of PC or TV files at a time.
 
+## The TV api (21/11): the TV as Claude's computer
+Ethan wants everything doable from a chat with the PC off, using the TV as the compute.
+- Send `api {"id":"a1","do":"aroflo.task","args":{"jn":"9530"}}` on the Todoist remote. Answer: `TV: api a1 ok {...}`
+  or `TV: api a1 err {...}`. Big results and every failed job's log come attached as a file. Optional: `"key"` (a write
+  sent twice with the same key only runs once, the second gets the first answer back), `"dry":true`, `"branch":"test"`
+  (job code from that branch), `args.timeout` (sec, default 180), `args.url` (start page, same site only).
+- `Api.java`: queue (kept through restarts, one at a time), keys, logs. Jobs wait while the TV's on another app or HDMI
+  (Ethan, 21/11) and go once it's off or on our screens. `tv.*` answers straight away: tv.ping, tv.queue,
+  tv.cancel {id|all}, tv.log {id} (or the last 15), tv.shots {id} (that job's pictures, one comment each), tv.safe
+  {off:true}, tv.wake.
+- Job code lives in `jobs/` and loads fresh from GitHub on every request (no build needed): `jobs/lib.js` (shared
+  helpers) then `jobs/<area>.js`. It runs again on every page the job lands on, with `ec.state` carried over
+  (`ec.go(url)` saves it). If a newer copy throws a script error, the TV runs the job once more with the last copy
+  that worked. Areas so far: aroflo (check, search, task, calendar, run). `aroflo.run {js}` runs any bit of code on an
+  AroFlo page and returns the result: use it to look at a page (and `ec.shot`) before writing or fixing a job.
+- Presses: `ec.press(target, {expect, what})` only presses exactly one visible match, scrolls it into view, checks
+  nothing's on top, real finger tap in its middle, then waits for `expect`. Pictures before and after go in the
+  job's folder. Never pressed: send, submit, pay, delete, archive, reply, forward (ec.BLOCK). Admin and settings
+  pages are blocked in lib and in the WebView. Writes must check `ec.dry`.
+- `RunnerActivity` runs api jobs (kind api) on its PC-size hidden page, full screen while they run, then back to how
+  the TV was. With more jobs queued it stays open for them.
+- `Crash.java`: any crash's trace is posted on the remote next start. Two crashes in 10 min = safe mode (api jobs
+  paused, everything else runs). A new build or tv.safe {off:true} clears it.
+
 ## AroFlo session limit
-AroFlo caps how many devices can be signed in as one user. When Ethan (or anything on his PC) signs in, the TV gets
-the User Session Limit page. The TV only takes AroFlo back when the filer has AroFlo jobs waiting: weeknights 6pm
-to 6am and weekends it presses CONTINUE itself (every 20 min at most); in work hours it adds a follow up instead so
-it never logs him out mid job. The filer script on the TV never stands down after a Continue (0.9.89).
+AroFlo caps how many devices can be signed in as one user. When Ethan signs in elsewhere, the TV gets the User
+Session Limit page. Pressing CONTINUE on the TV does NOT sign his PC or phone out (Ethan, 21/11), so the Filer presses
+it itself any time (at most every 10 min), day or night, and api jobs press it too (jobs/aroflo.js).
 
 ## Open items
 - Deep dive on PDF grabs missing on the first go (follow up "Deep dive: why the TV filer misses PDFs"). Best long

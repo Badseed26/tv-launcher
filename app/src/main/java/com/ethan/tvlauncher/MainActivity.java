@@ -70,6 +70,7 @@ public class MainActivity extends Activity implements Ui.FocusListener {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        Crash.install(this);
 
         FrameLayout root = new FrameLayout(this);
         root.setClipChildren(false);
