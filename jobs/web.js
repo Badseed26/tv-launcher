@@ -196,7 +196,7 @@ ec.run(async function () {
     var text = ec.text(), chars = Math.min(Number(o.chars) || 1500, 20000);
     return { url: location.href.replace(/[?#].*$/, '') + (location.hash && location.hash.length < 80 ? location.hash : ''), title: document.title.slice(0, 90),
       frames: all('iframe').filter(vis).length || undefined,
-      text: text.slice(0, chars), more: Math.max(0, text.length - chars), els: list.slice(0, Number(o.max) || 150), elsMore: Math.max(0, list.length - (Number(o.max) || 150)) };
+      text: text.slice(0, chars), more: Math.max(0, text.length - chars), els: list.slice(0, Number(o.max) || 60), elsMore: Math.max(0, list.length - (Number(o.max) || 60)) };
   };
   var target = function (a) {
     if (a.ref != null) {

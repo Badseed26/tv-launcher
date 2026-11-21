@@ -208,7 +208,7 @@ final class Api {
         final String name = file == null ? null : "api-" + id + (ok ? ".json" : "-log.txt");
         post(c, file == null ? text : "api " + id + (ok ? " ok, result attached" : " err " + result.optString("err") + " (log attached)"), file, name);
         String full = result.toString();
-        board(c, "api " + id + (ok ? " ok " : " err ") + (full.length() > 9000 ? full.substring(0, 9000) + "...(cut, the full answer's attached on the remote)" : full));
+        board(c, "api " + id + (ok ? " ok " : " err ") + (full.length() > 12000 ? full.substring(0, 12000) + "...(cut, the full answer's attached on the remote)" : full));
         // web.shot and friends: the page's newest pictures come straight after the answer
         if (result.optInt("pictures", 0) > 0) {
             final int n = Math.min(4, result.optInt("pictures"));
@@ -269,9 +269,11 @@ final class Api {
                 SharedPreferences sp = p(c);
                 String at = new java.text.SimpleDateFormat("h:mm:ss a", java.util.Locale.US).format(new java.util.Date());
                 StringBuilder sb = new StringBuilder("[" + at + "] TV: " + line);
+                // newest in full, the 5 before it as one short line each (keeps every read small)
+                int n = 0;
                 for (String old : sp.getString("board", "").split(java.util.regex.Pattern.quote(SEP))) {
-                    if (old.isEmpty() || sb.length() + old.length() > 14000) continue;
-                    sb.append(SEP).append(old);
+                    if (old.isEmpty() || ++n > 5) continue;
+                    sb.append(SEP).append(old.length() > 160 ? old.substring(0, 160) + "..." : old);
                 }
                 String all = sb.toString();
                 sp.edit().putString("board", all).apply();
