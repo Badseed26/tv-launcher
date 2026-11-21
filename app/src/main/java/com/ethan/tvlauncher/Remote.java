@@ -179,6 +179,25 @@ final class Remote {
                     // Try 2: a screen that asks Android to switch the TV on as it opens
                     if (!screenOn) WakeActivity.start(c, false);
                     reply = screenOn ? "TV was already on." : "Turning the TV on. Send status in a few seconds to check.";
+                } else if (lc.equals("weather") || lc.startsWith("weather ")) {
+                    // Home screen weather (21/11): "weather <town>" sets the place, "weather off" hides it
+                    final String town = cmd.trim().substring(7).trim();
+                    if (town.isEmpty()) {
+                        String[] l = Weather.lines(c);
+                        reply = !Weather.hasPlace(c) ? "No weather place set. Send weather <town> to set one."
+                                : "Weather for " + Weather.place(c) + (l != null ? ": " + l[0] + " " + l[1] : ", nothing fetched yet.");
+                    } else if (town.equalsIgnoreCase("off")) {
+                        Weather.clear(c);
+                        reply = "Weather's off the home screen.";
+                    } else {
+                        reply = "Looking up " + town + "...";
+                        new Thread(new Runnable() {
+                            @Override
+                            public void run() {
+                                say(token, Weather.setPlace(c, town));
+                            }
+                        }, "weather-place").start();
+                    }
                 } else if (lc.equals("tv code") || lc.startsWith("tv code ")) {
                     // The code the TV asks for before the Filer or Runner opens from the TV itself (21/11)
                     String n = lc.substring(7).trim();

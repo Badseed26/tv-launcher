@@ -66,6 +66,13 @@
             android:screenOrientation="landscape" />
 
         <activity
+            android:name=".WorkAppsActivity"
+            android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout|uiMode|density"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:screenOrientation="landscape" />
+
+        <activity
             android:name=".FilerActivity"
             android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout|uiMode|density"
             android:excludeFromRecents="true"

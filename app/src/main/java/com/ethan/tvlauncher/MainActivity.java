@@ -42,24 +42,27 @@ public class MainActivity extends Activity implements Ui.FocusListener {
     private LinearLayout grid;
     private final List<View> cards = new ArrayList<>();
     private int lastFocused = 0;
-    private TextView workBtn, filerBtn, runnerBtn;
-    /** Folds Filer and Runner back behind the work apps button (2 min after the code, or coming back home). */
-    private final Runnable closeWork = new Runnable() {
-        @Override
-        public void run() {
-            if (workBtn == null) return;
-            boolean had = filerBtn.hasFocus() || runnerBtn.hasFocus();
-            filerBtn.setVisibility(View.GONE);
-            runnerBtn.setVisibility(View.GONE);
-            workBtn.setVisibility(View.VISIBLE);
-            if (had) workBtn.requestFocus();
-        }
-    };
+    private LinearLayout weatherCol;
+    private TextView weatherTemp, weatherMore, weatherPlace;
 
     private final Runnable tick = new Runnable() {
         @Override
         public void run() {
             updateClock();
+            showWeather();
+            if (Weather.due(MainActivity.this)) {
+                new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (Weather.refresh(getApplicationContext(), false)) handler.post(new Runnable() {
+                            @Override
+                            public void run() {
+                                showWeather();
+                            }
+                        });
+                    }
+                }, "weather").start();
+            }
             handler.postDelayed(this, 10_000);
         }
     };
@@ -101,6 +104,34 @@ public class MainActivity extends Activity implements Ui.FocusListener {
         timeCol.addView(date, dlp);
         top.addView(timeCol);
 
+        // Live weather next to the clock (21/11). Hidden until a place is set with "weather <town>" on the Todoist remote.
+        weatherCol = new LinearLayout(this);
+        weatherCol.setOrientation(LinearLayout.VERTICAL);
+        weatherCol.setClipChildren(false);
+        LinearLayout tempRow = new LinearLayout(this);
+        tempRow.setOrientation(LinearLayout.HORIZONTAL);
+        tempRow.setGravity(android.view.Gravity.BOTTOM);
+        weatherTemp = Ui.text(this, "", 44, Ui.TEXT_PRIMARY, Ui.LIGHT);
+        tempRow.addView(weatherTemp);
+        weatherPlace = Ui.text(this, "", 15, Ui.TEXT_SECONDARY, Ui.REGULAR);
+        LinearLayout.LayoutParams plp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        plp.leftMargin = Ui.dp(this, 12);
+        plp.bottomMargin = Ui.dp(this, 6);
+        tempRow.addView(weatherPlace, plp);
+        weatherCol.addView(tempRow);
+        weatherMore = Ui.text(this, "", 16, Ui.TEXT_SECONDARY, Ui.REGULAR);
+        LinearLayout.LayoutParams mlp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        mlp.topMargin = Ui.dp(this, 10);
+        weatherCol.addView(weatherMore, mlp);
+        LinearLayout.LayoutParams wlp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        wlp.leftMargin = Ui.dp(this, 48);
+        wlp.topMargin = Ui.dp(this, 14);
+        top.addView(weatherCol, wlp);
+        weatherCol.setVisibility(View.GONE);
+
         View spacer = new View(this);
         top.addView(spacer, new LinearLayout.LayoutParams(0, 1, 1f));
 
@@ -110,41 +141,19 @@ public class MainActivity extends Activity implements Ui.FocusListener {
         buttons.setClipToPadding(false);
         // Breathing room so the selected button can grow without hitting anything.
         buttons.setPadding(Ui.dp(this, 12), Ui.dp(this, 8), Ui.dp(this, 12), Ui.dp(this, 12));
-        // One "Ethan work apps" button behind the TV code (Ethan, 21/11). Once the code's in it opens out into
-        // Filer and Runner right there in the row, so the phone page can still tap them. The phone page never gets asked.
-        final TextView filer = Ui.pill(this, "Filer", new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                startActivity(new Intent(MainActivity.this, FilerActivity.class));
-            }
-        });
-        final TextView runner = Ui.pill(this, "Runner", new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                startActivity(new Intent(MainActivity.this, RunnerActivity.class));
-            }
-        });
+        // One "Ethan work apps" button behind the TV code (Ethan, 21/11). Opens its own menu screen with Filer and
+        // Runner on it. The phone page never gets asked for the code.
         final TextView work = Ui.pill(this, "Ethan work apps", new View.OnClickListener() {
             @Override
-            public void onClick(final View v) {
+            public void onClick(View v) {
                 Lock.ask(MainActivity.this, "work apps", new Runnable() {
                     @Override
                     public void run() {
-                        v.setVisibility(View.GONE);
-                        filer.setVisibility(View.VISIBLE);
-                        runner.setVisibility(View.VISIBLE);
-                        filer.requestFocus();
-                        handler.removeCallbacks(closeWork);
-                        handler.postDelayed(closeWork, 2 * 60 * 1000);
+                        startActivity(new Intent(MainActivity.this, WorkAppsActivity.class));
                     }
                 });
             }
         });
-        workBtn = work;
-        filerBtn = filer;
-        runnerBtn = runner;
-        filer.setVisibility(View.GONE);
-        runner.setVisibility(View.GONE);
         TextView updates = Ui.pill(this, "Updates", new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -164,13 +173,6 @@ public class MainActivity extends Activity implements Ui.FocusListener {
             }
         });
         buttons.addView(work);
-        LinearLayout.LayoutParams flp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        buttons.addView(filer, flp);
-        LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        rlp.leftMargin = Ui.dp(this, 14);
-        buttons.addView(runner, rlp);
         LinearLayout.LayoutParams ulp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         ulp.leftMargin = Ui.dp(this, 14);
@@ -261,11 +263,24 @@ public class MainActivity extends Activity implements Ui.FocusListener {
         date.setText(new SimpleDateFormat("EEEE d MMMM", Locale.getDefault()).format(now));
     }
 
+    private void showWeather() {
+        if (weatherCol == null) return;
+        String[] l = Weather.hasPlace(this) ? Weather.lines(this) : null;
+        if (l == null) {
+            weatherCol.setVisibility(View.GONE);
+            return;
+        }
+        weatherTemp.setText(l[0]);
+        String pl = Weather.place(this);
+        int comma = pl.indexOf(',');
+        weatherPlace.setText(comma > 0 ? pl.substring(0, comma) : pl);
+        weatherMore.setText(l[1]);
+        weatherCol.setVisibility(View.VISIBLE);
+    }
+
     @Override
     protected void onResume() {
         super.onResume();
-        handler.removeCallbacks(closeWork);
-        closeWork.run();
         buildGrid();
         handler.post(new Runnable() {
             @Override
