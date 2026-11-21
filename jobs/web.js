@@ -68,7 +68,9 @@ ec.run(async function () {
   }
 
   // a page that's already been worked on this tab is settled: don't wait again
+  var T0 = Date.now(), T = {};
   if (window.__ecTab) await settle(800); else await settle(6000);
+  T.settle = Date.now() - T0;
   window.__ecTab = true;
 
   // Ambrose admin (Blazor) often doesn't come up: spinner, the error bar, or a lost connection. Reload, 4 goes tops.
@@ -209,13 +211,13 @@ ec.run(async function () {
   // ---- what's on the page
   var labelOf = function (el) {
     var t = el.getAttribute('aria-label') || '';
-    if (!t && el.id) { var l = document.querySelector('label[for="' + CSS.escape(el.id) + '"]'); if (l) t = l.innerText; }
-    if (!t) { var lc = el.closest('label'); if (lc) t = lc.innerText; }
-    if (!t && el.getAttribute('aria-labelledby')) t = el.getAttribute('aria-labelledby').split(/\s+/).map(function (i) { var x = document.getElementById(i); return x ? x.innerText : ''; }).join(' ');
+    if (!t && el.id) { var l = document.querySelector('label[for="' + CSS.escape(el.id) + '"]'); if (l) t = l.textContent; }
+    if (!t) { var lc = el.closest('label'); if (lc) t = lc.textContent; }
+    if (!t && el.getAttribute('aria-labelledby')) t = el.getAttribute('aria-labelledby').split(/\s+/).map(function (i) { var x = document.getElementById(i); return x ? x.textContent : ''; }).join(' ');
     if (!t) t = el.placeholder || el.title || '';
     if (!t) { // the nearest text before it (form rows usually put the question first)
       var p = el.parentElement, n = 0;
-      while (p && n < 4 && !t) { var tx = flat(p.innerText); if (tx && tx.length < 200) t = tx; p = p.parentElement; n++; }
+      while (p && n < 4 && !t) { var tx = flat(p.textContent); if (tx && tx.length < 200) t = tx; p = p.parentElement; n++; }
     }
     if (!t) t = el.name || '';
     return flat(t).slice(0, 90);
@@ -259,18 +261,20 @@ ec.run(async function () {
       var on2 = el.checked !== undefined ? el.checked : /true|checked/.test((el.getAttribute('aria-checked') || '') + el.className);
       s = 'radio ' + (on2 ? '(o)' : '( )') + ' "' + labelOf(el) + '"' + (el.name ? ' group ' + el.name : '');
     } else if (tag == 'input' || tag == 'textarea' || el.isContentEditable) {
-      var v = el.isContentEditable ? el.innerText : el.value;
+      var v = el.isContentEditable ? el.textContent : el.value;
       s = (tag == 'textarea' || el.isContentEditable ? 'text area' : 'box' + (type && type != 'text' ? ' (' + type + ')' : '')) + ' "' + labelOf(el) + '"' +
         (type == 'password' ? (v ? ' = (filled)' : '') : v ? ' = "' + flat(v).slice(0, 120) + '"' : '') + (el.required ? ' *' : '') + (el.disabled || el.readOnly ? ' (locked)' : '');
     } else {
-      var t = flat(el.innerText || el.value || el.getAttribute('aria-label') || el.title).slice(0, 70);
+      var t = flat(el.textContent || el.value || el.getAttribute('aria-label') || el.title).slice(0, 70);
       s = (tag == 'a' ? 'link' : 'button') + ' "' + t + '"' + (el.disabled ? ' (off)' : '') + (WEB_BLOCK.test(t) ? ' (Ethan presses this)' : '');
     }
     return o.ref + ' ' + s;
   };
   var look = function (o) {
     o = o || {};
+    var t1 = Date.now();
     var list = els().map(describe);
+    T.look = Date.now() - t1;
     if (o.find) { var f = String(o.find).toLowerCase(); list = list.filter(function (x) { return x.toLowerCase().indexOf(f) >= 0; }); }
     var text = ec.text(), chars = Math.min(Number(o.chars) || 1500, 20000);
     return { url: location.href.replace(/[?#].*$/, '') + (location.hash && location.hash.length < 80 ? location.hash : ''), title: document.title.slice(0, 90),
@@ -304,6 +308,7 @@ ec.run(async function () {
     var o = { ok: true };
     for (var k in (extra || {})) o[k] = extra[k];
     if (A.look !== false) o.look = look({ find: A.find, chars: A.chars || 1200, max: A.max });
+    T.all = Date.now() - T0; o.t = T;
     return o;
   };
 
