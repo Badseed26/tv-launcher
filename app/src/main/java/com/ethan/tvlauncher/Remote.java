@@ -192,7 +192,17 @@ final class Remote {
                     String[] parts = cmd.trim().split("\\s+");
                     if (parts.length == 1) reply = Link.status(c);
                     else if (parts[1].equalsIgnoreCase("off")) reply = Link.off(c);
-                    else if (parts.length >= 3) reply = Link.pair(c, parts[1], parts[2]);
+                    else if (parts.length >= 3) {
+                        // pairing goes over the network, so off the main thread, answering when it's done
+                        final String u = parts[1], code = parts[2];
+                        new Thread(new Runnable() {
+                            @Override
+                            public void run() {
+                                say(token, Link.pair(c, u, code));
+                            }
+                        }, "link-pair").start();
+                        reply = null;
+                    }
                     else reply = "Link: send link <relay url> <code> (Claude makes the code).";
                 } else if (lc.equals("weather") || lc.startsWith("weather ")) {
                     // Home screen weather (21/11): "weather <town>" sets the place, "weather off" hides it
