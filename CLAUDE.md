@@ -49,8 +49,9 @@ This repo is **public**: never put logins, PINs, tokens, IP addresses or the bus
    press, code). Both need the DUMP permission, so only the ADB shell can send them.
 
 ## How the pieces fit
-- `MainActivity`: home screen (clock, Filer, Updates, All apps, Settings, favourite app tiles). `Ui`: shared views.
-- `Lock` (21/11): the Filer and Runner tiles ask for a code when pressed on the TV itself (number keys or an on screen
+- `MainActivity`: home screen (clock, Ethan work apps, Updates, All apps, Settings, favourite app tiles). `Ui`: shared views.
+- `Lock` (21/11): Filer and Runner sit behind one "Ethan work apps" button on the home row. It asks for a code when
+  pressed on the TV itself, then opens out into Filer and Runner in the row for 2 min (folds back on coming home) (number keys or an on screen
   pad, 5 wrong tries locks it 10 min, no asking again for 2 min after). Taps and keys from the phone page (`Screen.tap/key`
   mark `Lock.remoteAt`), the Todoist remote and auto runs never ask. The code is `tv code <digits>` on the Todoist
   remote, kept in the app's own storage; until one's set it's the phone page PIN. The phone page also has Wake TV.

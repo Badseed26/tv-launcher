@@ -42,6 +42,19 @@ public class MainActivity extends Activity implements Ui.FocusListener {
     private LinearLayout grid;
     private final List<View> cards = new ArrayList<>();
     private int lastFocused = 0;
+    private TextView workBtn, filerBtn, runnerBtn;
+    /** Folds Filer and Runner back behind the work apps button (2 min after the code, or coming back home). */
+    private final Runnable closeWork = new Runnable() {
+        @Override
+        public void run() {
+            if (workBtn == null) return;
+            boolean had = filerBtn.hasFocus() || runnerBtn.hasFocus();
+            filerBtn.setVisibility(View.GONE);
+            runnerBtn.setVisibility(View.GONE);
+            workBtn.setVisibility(View.VISIBLE);
+            if (had) workBtn.requestFocus();
+        }
+    };
 
     private final Runnable tick = new Runnable() {
         @Override
@@ -97,29 +110,41 @@ public class MainActivity extends Activity implements Ui.FocusListener {
         buttons.setClipToPadding(false);
         // Breathing room so the selected button can grow without hitting anything.
         buttons.setPadding(Ui.dp(this, 12), Ui.dp(this, 8), Ui.dp(this, 12), Ui.dp(this, 12));
-        TextView filer = Ui.pill(this, "Filer", new View.OnClickListener() {
+        // One "Ethan work apps" button behind the TV code (Ethan, 21/11). Once the code's in it opens out into
+        // Filer and Runner right there in the row, so the phone page can still tap them. The phone page never gets asked.
+        final TextView filer = Ui.pill(this, "Filer", new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                // The TV asks for the code first, the phone page doesn't (Ethan, 21/11)
-                Lock.ask(MainActivity.this, "Filer", new Runnable() {
+                startActivity(new Intent(MainActivity.this, FilerActivity.class));
+            }
+        });
+        final TextView runner = Ui.pill(this, "Runner", new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                startActivity(new Intent(MainActivity.this, RunnerActivity.class));
+            }
+        });
+        final TextView work = Ui.pill(this, "Ethan work apps", new View.OnClickListener() {
+            @Override
+            public void onClick(final View v) {
+                Lock.ask(MainActivity.this, "work apps", new Runnable() {
                     @Override
                     public void run() {
-                        startActivity(new Intent(MainActivity.this, FilerActivity.class));
+                        v.setVisibility(View.GONE);
+                        filer.setVisibility(View.VISIBLE);
+                        runner.setVisibility(View.VISIBLE);
+                        filer.requestFocus();
+                        handler.removeCallbacks(closeWork);
+                        handler.postDelayed(closeWork, 2 * 60 * 1000);
                     }
                 });
             }
         });
-        TextView runner = Ui.pill(this, "Runner", new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                Lock.ask(MainActivity.this, "Runner", new Runnable() {
-                    @Override
-                    public void run() {
-                        startActivity(new Intent(MainActivity.this, RunnerActivity.class));
-                    }
-                });
-            }
-        });
+        workBtn = work;
+        filerBtn = filer;
+        runnerBtn = runner;
+        filer.setVisibility(View.GONE);
+        runner.setVisibility(View.GONE);
         TextView updates = Ui.pill(this, "Updates", new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -138,7 +163,10 @@ public class MainActivity extends Activity implements Ui.FocusListener {
                 Ui.openSettings(MainActivity.this);
             }
         });
-        buttons.addView(filer);
+        buttons.addView(work);
+        LinearLayout.LayoutParams flp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        buttons.addView(filer, flp);
         LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         rlp.leftMargin = Ui.dp(this, 14);
@@ -236,6 +264,8 @@ public class MainActivity extends Activity implements Ui.FocusListener {
     @Override
     protected void onResume() {
         super.onResume();
+        handler.removeCallbacks(closeWork);
+        closeWork.run();
         buildGrid();
         handler.post(new Runnable() {
             @Override
