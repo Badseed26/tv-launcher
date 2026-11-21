@@ -128,6 +128,14 @@ Ethan wants everything doable from a chat with the PC off, using the TV as the c
   {q, folder, max}, outlook.read {id | q, n}, outlook.attachment {id | q, name | all} (files on the remote task),
   outlook.run {js} (has svc(action, body), search, getItem). If Outlook's signed out the job says so; the TV never types
   the Microsoft login.
+  - Search (verified 21/11): Outlook's search words (QueryString) come back empty and a whole-mailbox (Deep) search is
+    refused, so it's Contains restrictions on subject or body per folder ("all" = inbox and sent). Sender and date
+    can't go in a restriction either, so from: and since: page through newest first (500 a folder tops).
+  - Verified 21/11 on build 67-71: check 16 s, "Four Mile" over inbox and sent 32 hits, from:ambrose since:14d 4 hits,
+    read with attachments list, a 698 KB PDF attachment came through whole on the remote task (32 s).
+  - Not yet checked: reading an email that's unread (GetItem shouldn't change read status; check it on the first real one).
+- `*.run` jobs: the TV puts the js on the page itself as `window.__ecRun` (build 68 on), because Outlook's page blocks
+  turning text into code (CSP). A js that doesn't parse fails the job cleanly.
 - Job code comes from the newest commit on the branch: one GitHub API call for the commit sha (kept 15 s), then the raw
   file at that sha (not rate limited, never stale). If GitHub's API is rate limited it falls back to the branch's raw file.
 - `RunnerActivity` runs api jobs (kind api) on its PC-size hidden page, full screen while they run, then back to how
