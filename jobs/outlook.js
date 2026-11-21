@@ -131,6 +131,27 @@ ec.run(async function () {
       seen: window.__ecOl.seen.slice(0, 20), blocked: window.__ecOl.blocked };
   }
 
+  if (what == 'outlook.probe') {
+    var probe = async function () {
+var Q=A.q||'Four Mile', out={};
+function base(folder,trav){return {__type:'FindItemRequest:#Exchange',ItemShape:{__type:'ItemResponseShape:#Exchange',BaseShape:'IdOnly'},ParentFolderIds:[{__type:'DistinguishedFolderId:#Exchange',Id:folder}],Traversal:trav||'Shallow',Paging:{__type:'IndexedPageView:#Exchange',BasePoint:'Beginning',Offset:0,MaxEntriesReturned:5}};}
+function con(f,v){return {__type:'Contains:#Exchange',ContainmentMode:'Substring',ContainmentComparison:'IgnoreCase',Item:{__type:'PropertyUri:#Exchange',FieldURI:f},Constant:{__type:'ConstantValueType:#Exchange',Value:v}};}
+async function t(name,b){try{var r=await svc('FindItem',b);var rf=r.msg&&r.msg.RootFolder;out[name]=rf?(rf.TotalItemsInView+'/'+(rf.Items||[]).length):JSON.stringify(r.msg).slice(0,120);}catch(e){out[name]='ERR '+e.message.slice(0,140);}}
+var b;
+b=base('inbox');b.QueryString=Q;await t('qsStr',b);
+b=base('inbox');b.QueryString={__type:'QueryStringType:#Exchange',Value:Q};await t('qsObj',b);
+b=base('inbox');b.Restriction={__type:'RestrictionType:#Exchange',Item:con('Subject',Q)};await t('subj',b);
+b=base('inbox');b.Restriction={__type:'RestrictionType:#Exchange',Item:con('Body',Q)};await t('body',b);
+b=base('inbox');b.Restriction={__type:'RestrictionType:#Exchange',Item:{__type:'Or:#Exchange',Items:[con('Subject',Q),con('Body',Q)]}};await t('or',b);
+b=base('msgfolderroot','Deep');await t('deep',b);
+b=base('sentitems');b.Restriction={__type:'RestrictionType:#Exchange',Item:con('Subject',Q)};await t('sentSubj',b);
+b=base('inbox');await t('plain',b);
+return {ok:true,out:out};
+
+    };
+    return await probe();
+  }
+
   if (what == 'outlook.search') {
     var list = await search(A.q || '', A.folder, A.max);
     ec.log('search "' + (A.q || '') + '" in ' + (A.folder || 'inbox') + ': ' + list.length);
