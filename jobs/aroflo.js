@@ -21,8 +21,18 @@ ec.run(async function () {
     await ec.press({ text: 'continue', exact: false }, { expect: function () { return !/User Session Limit/i.test(ec.text()); }, what: 'AroFlo to let the TV in', timeout: 20000 });
     return; // the page moves on and the job runs again there
   }
-  if (document.querySelector('input[type=password]') || /\/login/i.test(location.pathname))
-    return ec.fail('AroFlo is signed out on the TV. Open the Filer once so it signs back in, then send this again.');
+  if ([].slice.call(document.querySelectorAll('input[type=password]')).some(ec.visible) || /\/login/i.test(location.pathname)) {
+    // signed out: the TV fills its saved login itself (never seen by this code), at most twice in 30 min
+    S.logins = (S.logins || 0) + 1; ec.save();
+    if (S.logins > 2) return ec.fail('AroFlo still wants a sign-in after 2 goes with the saved login');
+    var r0 = window.ecApi.login('__TOKEN__');
+    if (r0 != 'ok') return ec.fail('AroFlo is signed out on the TV and it can\'t sign in: ' + r0);
+    ec.log('AroFlo sign-in page, the TV is entering the saved login');
+    ec.leaving = true;
+    await ec.sleep(25000); // the page moves on and the job runs again there
+    if (!ec.finished) ec.fail('AroFlo didn\'t move on after the sign-in (still on ' + location.pathname + ')');
+    return;
+  }
 
   var search = async function (term, field) {
     var fd = new URLSearchParams({ taskString: term, SearchParam: field, searchtasks: 'Search', searchtasks_btn: 'Search' });

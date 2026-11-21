@@ -1206,6 +1206,55 @@ public class RunnerActivity extends Activity {
                 }
             });
         }
+
+        /** AroFlo's sign-in page: the TV fills the saved login itself, the job code never sees it. */
+        @JavascriptInterface
+        public String login(String t) {
+            if (!ok(t)) return "no";
+            final String why = afLoginAllowed();
+            if (why != null) return why;
+            handler.post(new Runnable() {
+                @Override
+                public void run() {
+                    afLogin();
+                }
+            });
+            return "ok";
+        }
+    }
+
+    /** Null when the TV may try the saved AroFlo login now: at most 2 goes in 30 min, so the account never locks. */
+    private String afLoginAllowed() {
+        if (!Secrets.has(this, Secrets.AROFLO_PASS)) return "no AroFlo login saved on the TV";
+        android.content.SharedPreferences sp = getSharedPreferences("api", MODE_PRIVATE);
+        long now = System.currentTimeMillis(), a = sp.getLong("afLogin1", 0), b = sp.getLong("afLogin2", 0);
+        if (now - a < 30 * 60000 && now - b < 30 * 60000) return "already tried the saved AroFlo login twice in 30 min, stopping so it doesn't lock";
+        sp.edit().putLong("afLogin1", b).putLong("afLogin2", now).apply();
+        return null;
+    }
+
+    private void afLogin() {
+        WebView w = web;
+        if (w == null) return;
+        String host = android.net.Uri.parse(String.valueOf(w.getUrl())).getHost();
+        if (host == null || !(host.equals("aroflo.com") || host.endsWith(".aroflo.com"))) return;
+        try {
+            JSONObject c = new JSONObject();
+            c.put("user", Secrets.get(this, Secrets.AROFLO_USER));
+            c.put("pass", Secrets.get(this, Secrets.AROFLO_PASS));
+            apiLine("signing in to AroFlo with the saved login");
+            w.evaluateJavascript("(function(c){var vis=function(e){var r=e.getBoundingClientRect();return r.width>0&&r.height>0;};"
+                    + "var setV=function(el,v){var d=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;el.focus();d.call(el,v);"
+                    + "['input','keyup','change'].forEach(function(t){el.dispatchEvent(new Event(t,{bubbles:true}));});};"
+                    + "var pwd=[].slice.call(document.querySelectorAll('input[type=password]')).filter(vis)[0];if(!pwd)return;var f=pwd.form||document;"
+                    + "var uf=[].slice.call(f.querySelectorAll('input[type=text],input[type=email],input:not([type])')).filter(vis)[0];"
+                    + "if(uf&&c.user)setV(uf,c.user);setV(pwd,c.pass);setTimeout(function(){var b=null,pats=[/office\\s*login/i,/^\\s*(log\\s?in|sign\\s?in)\\s*$/i];"
+                    + "var cs=document.querySelectorAll('button,input[type=submit],a[role=button],[role=button]');for(var i=0;i<pats.length&&!b;i++)for(var j=0;j<cs.length;j++){"
+                    + "var tt=(cs[j].textContent||cs[j].value||'').trim();if(vis(cs[j])&&pats[i].test(tt)){b=cs[j];break;}}"
+                    + "if(!b)b=f.querySelector('button[type=submit],input[type=submit]');if(b)b.click();else if(pwd.form)pwd.form.submit();},600);})(" + c + ")", null);
+        } catch (Exception e) {
+            apiLine("sign in failed: " + e.getMessage());
+        }
     }
 
     // ---------------------------------------------------------------- bits
