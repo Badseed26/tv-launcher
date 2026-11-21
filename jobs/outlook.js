@@ -94,8 +94,6 @@ ec.run(async function () {
     var all = [];
     if (o.q) all.push(or([con('Subject', o.q), con('Body', o.q)]));
     if (o.subject) all.push(con('Subject', o.subject));
-    if (o.since) all.push({ __type: 'IsGreaterThanOrEqualTo:#Exchange', Item: { __type: 'PropertyUri:#Exchange', FieldURI: 'DateTimeReceived' },
-      FieldURIOrConstant: { __type: 'FieldURIOrConstantType:#Exchange', Item: { __type: 'ConstantValueType:#Exchange', Value: day(o.since) } } });
     if (!all.length) return null;
     return { __type: 'RestrictionType:#Exchange', Item: all.length == 1 ? all[0] : { __type: 'And:#Exchange', Items: all } };
   }
@@ -126,15 +124,19 @@ ec.run(async function () {
     max = Math.min(Number(max) || 25, 100);
     var o = parse(q, extra ? JSON.parse(JSON.stringify(extra)) : {});
     var r = restriction(o), out = [], total = 0;
-    // Exchange won't match on the sender in a restriction, so with from: it pages through (up to 500 a folder, newest
-    // first) and keeps the ones whose sender name or address has it
-    var fm = o.from ? String(o.from).toLowerCase() : null;
+    // Exchange won't take the sender or a date in a restriction here, so with from: or since: it pages through (up to
+    // 500 a folder, newest first), keeps the ones whose sender name or address has it, and stops at the since date
+    var fm = o.from ? String(o.from).toLowerCase() : null, sd = o.since ? Date.parse(day(o.since) + '+10:00') : null;
     for (var i = 0; i < list.length; i++) {
-      if (!fm) { var got = await findIn(list[i], r, max); total += got.total; out = out.concat(got.items); continue; }
-      var kept = 0;
-      for (var off = 0; off < 500 && kept < max; off += 100) {
+      if (!fm && !sd) { var got = await findIn(list[i], r, max); total += got.total; out = out.concat(got.items); continue; }
+      var kept = 0, past = false;
+      for (var off = 0; off < 500 && kept < max && !past; off += 100) {
         var pg = await findIn(list[i], r, 100, off);
-        pg.items.forEach(function (x) { if (x.from.toLowerCase().indexOf(fm) >= 0 && kept < max) { out.push(x); kept++; } });
+        pg.items.forEach(function (x) {
+          if (sd && Date.parse(x.when) < sd) { past = true; return; }
+          if (fm && x.from.toLowerCase().indexOf(fm) < 0) return;
+          if (kept < max) { out.push(x); kept++; }
+        });
         if (pg.items.length < 100) break;
       }
       total += kept;
@@ -155,10 +157,11 @@ ec.run(async function () {
     return x;
   }
 
-  async function pick() {
+  async function pick(wantAtt) {
     if (A.id) return String(A.id);
     if (!A.q && !A.from && !A.subject) throw new Error('needs id, or q / from / subject to search for it');
-    var list = await search(A.q, A.folder, Math.max(5, (Number(A.n) || 0) + 1), { from: A.from, subject: A.subject, since: A.since });
+    var list = await search(A.q, A.folder, Math.max(wantAtt ? 25 : 5, (Number(A.n) || 0) + 1), { from: A.from, subject: A.subject, since: A.since });
+    if (wantAtt) list = list.filter(function (x) { return x.att; });
     var it = list[Number(A.n) || 0];
     if (!it) throw new Error('nothing found for ' + JSON.stringify({ q: A.q, from: A.from, subject: A.subject }));
     ec.log('picked "' + it.subj.slice(0, 60) + '" ' + it.when);
@@ -194,7 +197,7 @@ ec.run(async function () {
   }
 
   if (what == 'outlook.attachment') {
-    var it = await getItem(await pick());
+    var it = await getItem(await pick(true));
     var list2 = atts(it).filter(function (a) { return A.inline || !a.inline; });
     if (A.name) list2 = list2.filter(function (a) { return String(a.name || '').toLowerCase().indexOf(String(A.name).toLowerCase()) >= 0; });
     else if (!A.all) list2 = list2.slice(0, 1);
