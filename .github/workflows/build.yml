@@ -61,7 +61,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete latest --yes --cleanup-tag || true
-          gh release create latest tv-launcher.apk version.json --title "Build ${{ github.run_number }}" --notes "Latest TV launcher build"
-          # gh sometimes leaves it as a draft after a delete and recreate, which the TV can't see (build 57, 21/11)
           sleep 3
-          gh release edit latest --draft=false || true
+          gh release create latest tv-launcher.apk version.json --title "Build ${{ github.run_number }}" --notes "Latest TV launcher build" --draft=false
+          # gh sometimes leaves it as a draft after a delete and recreate, which the TV can't see (builds 57 and 89).
+          # A draft can't be found by its tag, so publish it by id, and check it took.
+          for i in 1 2 3 4 5; do
+            sleep 3
+            id=$(gh api "repos/${{ github.repository }}/releases?per_page=10" --jq '[.[] | select(.name == "Build ${{ github.run_number }}")][0].id')
+            draft=$(gh api "repos/${{ github.repository }}/releases/$id" --jq '.draft')
+            echo "release $id draft=$draft"
+            if [ "$draft" = "false" ]; then break; fi
+            gh api -X PATCH "repos/${{ github.repository }}/releases/$id" -F draft=false -f tag_name=latest > /dev/null || true
+          done
+          gh api "repos/${{ github.repository }}/releases/tags/latest" --jq '.name'
