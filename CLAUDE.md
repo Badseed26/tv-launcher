@@ -13,7 +13,8 @@ This repo is **public**: never put logins, PINs, tokens, IP addresses or the bus
   `git -c push.negotiate=true push`.
 
 ## Building and updating
-- Every push to main builds on GitHub Actions (`.github/workflows/build.yml`). versionCode = run number, so the
+- Every push to main builds on GitHub Actions (`.github/workflows/build.yml`), except pushes that only touch `jobs/` or
+  CLAUDE.md (21/11: those load fresh on the TV, and a build mid-update used to make `update` miss). versionCode = run number, so the
   build number is the Actions run number. The APK and `version.json` go on the release tagged `latest`.
 - Check a build: `gh api repos/Badseed26/tv-launcher/actions/runs --jq '.workflow_runs[0] | [.run_number,.status,.conclusion]|@tsv'`
 - Quick syntax check without the Android SDK:

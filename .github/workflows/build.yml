@@ -3,6 +3,10 @@ name: Build APK
 on:
   push:
     branches: [main]
+    # job code and notes load fresh on the TV, they don't need a new build (21/11)
+    paths-ignore:
+      - 'jobs/**'
+      - 'CLAUDE.md'
   workflow_dispatch:
 
 permissions:
