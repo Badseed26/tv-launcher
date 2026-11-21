@@ -22,9 +22,16 @@ ec.run(async function () {
   var SITES = [
     { name: 'cnw', host: /(^|\.)cnw\.com\.au$/i, login: 'https://shop.cnw.com.au/login', out: function () { return document.body && document.body.classList.contains('logged-out'); } },
     { name: 'tradezone', host: /(^|\.)tradezone\.com\.au$/i, login: 'https://www.tradezone.com.au/customer/account/login/', out: function () { return false; } },
-    { name: 'ambrose', host: /^tradies\.ambrosebuilding\.com\.au$/i, login: null, out: function () { return false; } }
+    { name: 'ambrose', host: /^tradies\.ambrosebuilding\.com\.au$/i, login: null, out: function () { return false; } },
+    { name: 'ambroseadmin', host: /^tradiesadmin\.ambroseconstruct\.com\.au$/i, login: null, out: function () { return false; } }
   ];
-  var site = SITES.filter(function (s) { return s.host.test(location.host); })[0];
+  var siteFor = function (h) { return SITES.filter(function (s) { return s.host.test(h); })[0]; };
+  var site = siteFor(location.host);
+  // a sign in page on some other host (a login server): it's for the site this job came from
+  if (site) S.lastSite = site.name;
+  else if (A.url && !S.lastSite) { try { var h0 = siteFor(new URL(A.url).host); if (h0) S.lastSite = h0.name; } catch (e) {} }
+  if (!site && S.lastSite && pwBoxNow()) site = SITES.filter(function (s) { return s.name == S.lastSite; })[0];
+  function pwBoxNow() { return [].slice.call(document.querySelectorAll('input[type=password]')).some(ec.visible); }
 
   // ---- small helpers
   var flat = function (x) { return String(x == null ? '' : x).replace(/\s+/g, ' ').trim(); };
@@ -42,6 +49,26 @@ ec.run(async function () {
   };
 
   await settle(10000);
+
+  // Ambrose admin (Blazor) often doesn't come up: spinner, the error bar, or a lost connection. Reload, 4 goes tops.
+  if (site && site.name == 'ambroseadmin') {
+    var stuck = function () {
+      var er = document.getElementById('blazor-error-ui'), rc = document.getElementById('components-reconnect-modal');
+      if (er && getComputedStyle(er).display != 'none') return 'Ambrose crashed';
+      if (rc && getComputedStyle(rc).display != 'none') return 'Ambrose lost its connection';
+      var mn = document.querySelector('main');
+      if (!pwBox() && mn && !mn.querySelector('div.widget, table, form, input, h3, h4') && flat(mn.textContent).length < 60) return 'Ambrose never finished loading';
+      return '';
+    };
+    var why = await ec.waitFor(function () { return !stuck() ? 'ok' : null; }, 12000, 400);
+    if (!why) {
+      S.reloads = (S.reloads || 0) + 1; ec.save();
+      if (S.reloads > 4) return ec.fail(stuck() + ', and 4 reloads didn\'t fix it');
+      ec.log(stuck() + ', reloading (' + S.reloads + ')');
+      ec.leaving = true; location.reload(); return;
+    }
+    await ec.sleep(600); // a beat for Blazor to wire the page up
+  }
 
   // ---- AroFlo's own pages: session limit and sign in, same as the aroflo jobs
   if (/office\.aroflo\.com$/.test(location.host)) {
@@ -201,8 +228,59 @@ ec.run(async function () {
     return o;
   };
 
-  // A press or fill that moved to a new page: the job runs again here, answer with the new page
-  if (S.acted) { await settle(); return answer({ moved: true, did: S.acted }); }
+  // ---- the actions. Each gives back what it did; the job adds a look at the page
+  var ops = {};
+  ops.look = async function () { return {}; };
+  ops.press = async function (a) {
+    var el = target(a), t0 = tapTarget(el);
+    var said = flat(t0.innerText || t0.value || t0.getAttribute('aria-label') || t0.title);
+    if (WEB_BLOCK.test(said)) throw new Error('not pressing "' + said.slice(0, 60) + '", send, submit, pay and the like are Ethan\'s to press');
+    var before = location.href, beforeText = ec.text().length;
+    await ec.press(t0, { script: !!a.script, shots: a.shots === true });
+    if (a.wait) await ec.waitFor(function () { return ec.text().indexOf(a.wait) >= 0; }, 15000, 300);
+    await settle();
+    return { did: 'pressed ' + ec.label(t0), moved: location.href != before, changed: ec.text().length != beforeText };
+  };
+  ops.fill = async function (a) {
+    var list = a.fields || [a], did = [];
+    for (var i = 0; i < list.length; i++) {
+      try { did.push((list[i].ref || list[i].label || list[i].sel) + ': ' + await setOne(list[i])); }
+      catch (e) { did.push((list[i].ref || list[i].label || list[i].sel) + ': FAILED ' + e.message); if (!a.keepGoing) { var er = new Error(did.join('; ')); er.did = did; throw er; } }
+    }
+    await settle(4000);
+    return { did: did.join('; ') };
+  };
+  ops.key = async function (a) {
+    var k = String(a.key || 'Enter'), kel = a.ref != null || a.sel || a.label ? target(a) : document.activeElement;
+    if (!kel || kel === document.body) throw new Error('nothing has focus, say which with ref');
+    if (/^enter$/i.test(k) && kel.form && [].slice.call(kel.form.querySelectorAll('button,input[type=submit]')).some(function (b) { return WEB_BLOCK.test(flat(b.innerText || b.value)); }))
+      throw new Error('not pressing Enter in a form that has a send/submit button, Ethan does those');
+    kel.focus();
+    var codes = { Enter: 13, Tab: 9, Escape: 27, ArrowDown: 40, ArrowUp: 38 };
+    ['keydown', 'keypress', 'keyup'].forEach(function (t) { kel.dispatchEvent(new KeyboardEvent(t, { key: k, code: k, keyCode: codes[k] || 0, which: codes[k] || 0, bubbles: true })); });
+    await settle(5000);
+    return { did: 'key ' + k };
+  };
+  ops.scroll = async function (a) {
+    if (a.ref != null || a.sel || a.text) target(a).scrollIntoView({ block: 'center' });
+    else window.scrollBy(0, Number(a.y) || 600);
+    await settle(2000);
+    return { did: 'scrolled' };
+  };
+  ops.wait = async function (a) {
+    var got = await ec.waitFor(function () { return ec.text().indexOf(a.text) >= 0; }, Math.min(Number(a.ms) || 15000, 60000), 300);
+    return { did: got ? 'saw "' + a.text + '"' : 'never saw "' + a.text + '"', found: !!got };
+  };
+  ops.sleep = async function (a) { await ec.sleep(Math.min(Number(a.ms) || 1000, 20000)); return { did: 'waited' }; };
+  ops.shot = async function (a) {
+    if (a.ref != null || a.sel) target(a).scrollIntoView({ block: 'center' });
+    await ec.shot(a.label || 'page');
+    S.pics = (S.pics || 0) + 1;
+    return { did: 'picture', pictures: S.pics };
+  };
+
+  // A single press that moved to a new page: the job runs again here, answer with the new page
+  if (S.acted && what != 'web.steps') { await settle(); return answer({ moved: true, did: S.acted }); }
 
   if (what == 'web.open' || what == 'web.look') return answer(S.signedIn ? { signedIn: true } : {});
 
@@ -211,95 +289,77 @@ ec.run(async function () {
     return { ok: true, url: location.href.replace(/[?#].*$/, ''), from: from, text: tx.slice(from, from + n), more: Math.max(0, tx.length - from - n) };
   }
 
-  if (what == 'web.press') {
-    var el = target(A), t0 = tapTarget(el);
-    var said = flat(t0.innerText || t0.value || t0.getAttribute('aria-label') || t0.title);
-    if (WEB_BLOCK.test(said)) return ec.fail('not pressing "' + said.slice(0, 60) + '", send, submit, pay and the like are Ethan\'s to press');
-    var before = location.href, beforeText = ec.text().length;
-    S.acted = 'press ' + ec.label(t0); ec.save();
-    await ec.press(t0, { script: !!A.script, shots: A.shots !== false });
-    if (A.wait) await ec.waitFor(function () { return ec.text().indexOf(A.wait) >= 0; }, 15000, 300);
+  // web.steps {steps: [{do: 'press', ref: 4}, {do: 'fill', fields: [...]}, {do: 'wait', text: 'Saved'}, ...]}
+  // Several actions in one request (each step can be any of the actions above). A step that moves to another page
+  // carries on from the next step there. Stops at the first one that fails, with a look at the page.
+  if (what == 'web.steps') {
+    var steps = A.steps || [], did = S.did || [];
+    for (var i = S.si || 0; i < steps.length; i++) {
+      var st = steps[i], op = String(st.do || '').replace(/^web\./, '');
+      if (!ops[op]) return ec.fail('step ' + (i + 1) + ': can\'t do "' + st.do + '" in steps (look, press, fill, key, scroll, wait, sleep, shot)', { did: did });
+      S.si = i + 1; S.did = did.concat([(i + 1) + ' ' + op + ' (moved page)']); ec.save();
+      try { var r = await ops[op](st); did.push((i + 1) + ' ' + op + ': ' + (r.did || 'ok')); }
+      catch (e) { did.push((i + 1) + ' ' + op + ': FAILED ' + e.message); var o = { did: did, look: look({ chars: 800 }) }; if (S.pics) o.pictures = S.pics; return ec.fail('step ' + (i + 1) + ' failed: ' + e.message, o); }
+      S.did = did; ec.save();
+    }
+    return answer({ did: did, pictures: S.pics || 0 });
+  }
+
+  if (what == 'web.ambrose') return ambrose();
+
+  var one = { 'web.press': 'press', 'web.fill': 'fill', 'web.key': 'key', 'web.scroll': 'scroll', 'web.wait': 'wait', 'web.shot': 'shot' }[what];
+  if (one) {
+    if (one == 'press') { S.acted = 'press'; ec.save(); }
+    try { var res = await ops[one](A); }
+    catch (e) { return ec.fail(e.message, { did: e.did, look: look({ chars: 600 }) }); }
+    S.acted = null; ec.save();
+    return answer(res);
+  }
+
+  // ---- web.ambrose {po}: from the Ambrose admin portal to that PO's report on Tradies Web (Ethan, 21/11).
+  // PO list, search the PO, open it, Bookings, then the report link. Stops with a look when there's a choice to make.
+  // Start it with args.url https://tradiesadmin.ambroseconstruct.com.au/PurchaseOrders
+  async function ambrose() {
+    var po = String(A.po || '').trim(), base = po.slice(0, 8);
+    if (!/^\d{8}(-\d{2,3})?$/.test(po)) return ec.fail('po wants the Ambrose PO number, like 20332055 or 20332055-07');
+    if (/tradies\.ambrosebuilding/.test(location.host)) return answer({ did: 'on Tradies Web for PO ' + po, steps: S.amb });
+    if (!/tradiesadmin/.test(location.host)) return ec.fail('not on Ambrose admin (' + location.host + ')');
+    S.amb = S.amb || [];
+    var note = function (x) { S.amb.push(x); ec.log(x); ec.save(); };
+    var rowText = function (r) { return flat(r.innerText); };
+    if (/^\/PurchaseOrders\/?$/i.test(location.pathname)) {
+      var search = await ec.waitFor(function () { return all('input[type=search]').filter(vis)[0]; }, 20000, 200);
+      if (!search) return ec.fail('no PO search box on the PO list', { look: look({ chars: 600 }) });
+      await ec.sleep(600);
+      var showAll = all('div.widget').filter(function (e) { return /Show All PO/i.test(e.textContent); })[0];
+      if (showAll) { var n0 = all('tbody tr').length; showAll.click(); await ec.waitFor(function () { return all('tbody tr').length != n0; }, 4000, 150); }
+      ec.fill(search, base);
+      search.dispatchEvent(new KeyboardEvent('keyup', { key: base.slice(-1), bubbles: true }));
+      var rows = await ec.waitFor(function () { var r = all('tbody tr').filter(function (r) { return rowText(r).indexOf(base) == 0; }); return r.length ? r : null; }, 8000, 150) || [];
+      var exact = rows.filter(function (r) { return po.length > 8 && rowText(r).indexOf(po) == 0; });
+      var pick = exact.length == 1 ? exact[0] : rows.length == 1 ? rows[0] : null;
+      if (!pick) return answer({ did: rows.length ? rows.length + ' POs start with ' + base + ', pick one (web.press its ref)' : 'PO ' + po + ' isn\'t on the PO list (try Invoices or Paid Invoices)', steps: S.amb });
+      note('found PO ' + rowText(pick).slice(0, 80));
+      var cell = pick.querySelector('.pointer-enabled') || pick.querySelector('td');
+      await ec.press(cell, { expect: function () { return /^\/PurchaseOrders\/[a-f0-9]{20,}/i.test(location.pathname); }, what: 'the PO page to open', timeout: 20000, shots: false });
+      await settle();
+    }
+    if (!/^\/PurchaseOrders\/[a-f0-9]{20,}/i.test(location.pathname)) return answer({ did: 'not on a PO page, here\'s where it is', steps: S.amb });
+    note('on the PO page');
+    var tab = ec.find({ text: 'bookings', exact: false, sel: 'a, button, [role=tab], li, .nav-link, div.tab, span' }).filter(function (e) { return flat(e.innerText).length < 30; });
+    if (tab.length != 1) return answer({ did: 'found ' + tab.length + ' Bookings tabs on the PO page, have a look', steps: S.amb });
+    await ec.press(tab[0], { shots: false });
     await settle();
-    S.acted = null; ec.save();
-    return answer({ did: 'pressed ' + ec.label(t0), moved: location.href != before, changed: ec.text().length != beforeText });
-  }
-
-  var setOne = async function (a) {
-    var el = target(a), v = a.value, tag = el.tagName, type = (el.type || '').toLowerCase();
-    var role = el.getAttribute('role') || '';
-    if (tag == 'SELECT') {
-      var want = String(v).toLowerCase(), opts = [].slice.call(el.options);
-      var opt = opts.filter(function (x) { return flat(x.text).toLowerCase() == want || x.value.toLowerCase() == want; })[0] ||
-        opts.filter(function (x) { return flat(x.text).toLowerCase().indexOf(want) >= 0; })[0];
-      if (!opt) throw new Error('"' + v + '" isn\'t in ' + describe({ el: el, ref: el.getAttribute('data-ec') }));
-      var set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set;
-      el.focus(); set.call(el, opt.value);
-      ['input', 'change'].forEach(function (t) { el.dispatchEvent(new Event(t, { bubbles: true })); });
-      if (window.jQuery) try { jQuery(el).trigger('change'); } catch (e) {}
-      el.blur();
-      ec.log('pick ' + ec.label(el) + ' = ' + flat(opt.text));
-      return 'picked "' + flat(opt.text) + '"';
-    }
-    if (type == 'checkbox' || type == 'radio' || /checkbox|radio/.test(role) || /^MAT-(CHECKBOX|RADIO-BUTTON)$/.test(tag)) {
-      var on = function () { return el.checked !== undefined ? el.checked : /true/.test(el.getAttribute('aria-checked') || '') || /checked/.test(el.className); };
-      var wantOn = !(v === false || v === 'false' || v === 0 || v === 'no' || v === 'off');
-      if (on() == wantOn) return 'already ' + (wantOn ? 'ticked' : 'clear');
-      await ec.press(tapTarget(el), { expect: function () { return on() == wantOn; }, what: 'the tick to change', shots: false });
-      return wantOn ? 'ticked' : 'cleared';
-    }
-    if (el.isContentEditable) {
-      el.focus(); el.innerText = String(v);
-      el.dispatchEvent(new InputEvent('input', { bubbles: true })); el.blur();
-      return 'typed';
-    }
-    if (type == 'password') throw new Error('passwords are never typed by a job, the TV fills its saved logins itself');
-    ec.fill(el, String(v));
-    // pickers that open a list as you type (suburbs, addresses): settle so the next step sees the list
-    await ec.sleep(300);
-    return 'typed';
-  };
-
-  if (what == 'web.fill') {
-    var list = A.fields || [A], did = [];
-    for (var i = 0; i < list.length; i++) {
-      try { did.push((list[i].ref || list[i].label || list[i].sel) + ': ' + await setOne(list[i])); }
-      catch (e) { did.push((list[i].ref || list[i].label || list[i].sel) + ': FAILED ' + e.message); if (!A.keepGoing) return ec.fail(did.join('; '), { done: did }); }
-    }
-    await settle(4000);
-    if (A.shot) await ec.shot('after fill');
-    return answer({ did: did, pictures: A.shot ? 1 : 0 });
-  }
-
-  if (what == 'web.key') {
-    var k = String(A.key || 'Enter'), kel = A.ref != null || A.sel || A.label ? target(A) : document.activeElement;
-    if (!kel || kel === document.body) return ec.fail('nothing has focus, say which with ref');
-    if (/^enter$/i.test(k) && kel.form && [].slice.call(kel.form.querySelectorAll('button,input[type=submit]')).some(function (b) { return WEB_BLOCK.test(flat(b.innerText || b.value)); }))
-      return ec.fail('not pressing Enter in a form that has a send/submit button, Ethan does those');
-    kel.focus();
-    var codes = { Enter: 13, Tab: 9, Escape: 27, ArrowDown: 40, ArrowUp: 38 };
-    ['keydown', 'keypress', 'keyup'].forEach(function (t) { kel.dispatchEvent(new KeyboardEvent(t, { key: k, code: k, keyCode: codes[k] || 0, which: codes[k] || 0, bubbles: true })); });
-    S.acted = 'key ' + k; ec.save();
-    await settle(5000);
-    S.acted = null; ec.save();
-    return answer({ did: 'key ' + k });
-  }
-
-  if (what == 'web.scroll') {
-    if (A.ref != null || A.sel || A.text) target(A).scrollIntoView({ block: 'center' });
-    else window.scrollBy(0, Number(A.y) || 600);
-    await settle(2000);
-    return answer({ did: 'scrolled' });
-  }
-
-  if (what == 'web.wait') {
-    var got = await ec.waitFor(function () { return ec.text().indexOf(A.text) >= 0; }, Math.min(Number(A.ms) || 15000, 60000), 300);
-    return answer({ found: !!got });
-  }
-
-  if (what == 'web.shot') {
-    if (A.ref != null || A.sel) target(A).scrollIntoView({ block: 'center' });
-    await ec.shot(A.label || 'page');
-    return answer({ pictures: 1 });
+    note('opened Bookings');
+    var reps = ec.find({ text: 'report', exact: false }).filter(function (e) { return flat(e.innerText).length < 60 && !WEB_BLOCK.test(flat(e.innerText)); });
+    if (reps.length != 1) return answer({ did: reps.length ? reps.length + ' report links under Bookings, pick one (web.press its ref)' : 'no report link under Bookings, have a look', steps: S.amb });
+    note('pressing ' + flat(reps[0].innerText));
+    S.acted = 'report'; ec.save();
+    await ec.press(reps[0], { shots: false });
+    await settle();
+    // it goes on to Tradies Web (this runs again there), or opened in place
+    if (/tradies\.ambrosebuilding/.test(location.host)) return answer({ did: 'on Tradies Web for PO ' + po, steps: S.amb });
+    return answer({ did: 'pressed the report link but it didn\'t go to Tradies Web, have a look', steps: S.amb });
   }
 
   if (what == 'web.run') {

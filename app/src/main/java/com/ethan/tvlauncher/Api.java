@@ -87,6 +87,8 @@ final class Api {
             int ahead = q.length() - 1 + (running != null ? 1 : 0);
             kick(c);
             String wait = busyReason(c);
+            // going straight away: no "queued" comment, the answer's along in a moment (one less Todoist call)
+            if (ahead == 0 && wait == null) return null;
             return "api " + id + " queued" + (ahead > 0 ? ", " + ahead + " ahead" : "")
                     + (wait != null && running == null ? ". Waiting: " + wait : "");
         }

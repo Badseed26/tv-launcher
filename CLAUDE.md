@@ -28,7 +28,7 @@ This repo is **public**: never put logins, PINs, tokens, IP addresses or the bus
 
 ## Talking to the TV
 1. **Todoist TV remote** (task `6j3H69pvQ9hQ86pX` in the job tracker's settings section). Add a comment with a
-   command; the TV polls every 20 s (every 3 s for 5 min after a command, 21/11) and answers with a comment starting `TV:`. Commands: wake, open filer,
+   command; the TV polls every 20 s (every 2 s for 10 min after a command, 21/11) and answers with a comment starting `TV:`. Commands: wake, open filer,
    close filer, status, log, reload, press <label>, code <n>, update, web remote, web remote new pin, check mail,
    test mail check, mail check on/off, mail check opens on/off, stay awake on/off, inbox pull <day>,
    lookup <terms; ...>, tv code (shows it), tv code <4 to 8 digits> (sets it), weather <town>, weather, weather off. The TV ignores anything over
@@ -105,7 +105,7 @@ This repo is **public**: never put logins, PINs, tokens, IP addresses or the bus
 ## The TV api (21/11): the TV as Claude's computer
 Ethan wants everything doable from a chat with the PC off, using the TV as the compute.
 - Send `api {"id":"a1","do":"aroflo.task","args":{"jn":"9530"}}` on the Todoist remote. Answer: `TV: api a1 ok {...}`
-  or `TV: api a1 err {...}`. Big results and every failed job's log come attached as a file. Optional: `"key"` (a write
+  or `TV: api a1 err {...}` (no "queued" comment when it goes straight away, build 74 on). Big results and every failed job's log come attached as a file. Optional: `"key"` (a write
   sent twice with the same key only runs once, the second gets the first answer back), `"dry":true`, `"branch":"test"`
   (job code from that branch), `args.timeout` (sec, default 180), `args.url` (start page, same site only).
 - `Api.java`: queue (kept through restarts, one at a time), keys, logs. Jobs wait while the TV's on another app or HDMI
@@ -152,7 +152,13 @@ Ethan wants everything doable from a chat with the PC off, using the TV as the c
   sign in page (or CNW's logged-out page), asks `ecApi.siteLogin(name)` and the TV fills it itself (one page or email
   then password, ticks remember me), at most 3 goes per site in 30 min. Then it goes back to the page it was after.
 - BridgeSelect is off on the TV (Ethan, 21/11, until he's shown Claude how): blocked in Sites.BLOCKED and the Runner.
-  Ambrose's admin portal (tradiesadmin) is blocked like any admin area.
+- Ambrose admin (tradiesadmin.ambroseconstruct.com.au, Ethan 21/11) is allowed: it's where reports are found. It has its
+  own saved login slot. `web.ambrose {po}` (with args.url .../PurchaseOrders) searches the PO list, opens the PO, then
+  Bookings, then the report link, ending on Tradies Web as an open tab; it stops with a look when there's a choice.
+  Blazor pages that hang (error bar, lost connection, never loads) get reloaded, 4 goes tops. Settings pages stay blocked.
+- `web.steps {steps:[{do:'press',ref:4},{do:'fill',fields:[...]},{do:'wait',text:'Saved'}]}` runs several actions in one
+  request (look, press, fill, key, scroll, wait, sleep, shot), carrying on after a page change, stopping at the first
+  failure with a look. Use it whenever the next few steps are known, it saves a round trip each.
 - `RunnerActivity` runs api jobs (kind api) on its PC-size hidden page, full screen while they run, then back to how
   the TV was. With more jobs queued it stays open for them.
 - Verified 21/11 on build 63: tv.ping in ~10 s, aroflo.search "Four Mile" 21 s (signed itself in), aroflo.task 9530

@@ -20,6 +20,8 @@ final class Sites {
             {"cnw", "CNW", "^(shop\\.|www\\.)?cnw\\.com\\.au$", "https://shop.cnw.com.au/login"},
             {"tradezone", "Tradezone", "^(www\\.)?tradezone\\.com\\.au$", "https://www.tradezone.com.au/customer/account/login/"},
             {"ambrose", "Ambrose Tradies Web", "^tradies\\.ambrosebuilding\\.com\\.au$", "https://tradies.ambrosebuilding.com.au/"},
+            // Ethan, 21/11: the admin portal is where reports are found (PO, Bookings, the report link to Tradies Web)
+            {"ambroseadmin", "Ambrose admin", "^tradiesadmin\\.ambroseconstruct\\.com\\.au$", "https://tradiesadmin.ambroseconstruct.com.au/"},
     };
 
     /** Never opened on the TV (Ethan, 21/11: BridgeSelect's off until he's shown Claude how it's done). */

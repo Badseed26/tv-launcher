@@ -967,7 +967,7 @@ public class RunnerActivity extends Activity {
     // ---------------------------------------------------------------- api jobs (21/11, see Api.java)
 
     private static final java.util.regex.Pattern BLOCKED = java.util.regex.Pattern.compile(
-            "(?i)(siteadmin|site_admin|/admin/|/administration|usermanagement|/settings/|tradiesadmin\\.)");
+            "(?i)(siteadmin|site_admin|/admin/|/administration|usermanagement|/settings/)");
     private static final String JOBS_RAW = "https://raw.githubusercontent.com/Badseed26/tv-launcher/";
     private Job carry;
     private String apiJs, apiState, apiHook;
@@ -1047,7 +1047,7 @@ public class RunnerActivity extends Activity {
                         }
                         String url = startUrl(area, ja);
                         if (url == null) {
-                            apiDone(Api.err("web".equals(area) ? "the TV only opens AroFlo, CNW, Tradezone and Ambrose Tradies pages (https), not " + (ja == null ? "" : ja.optString("url"))
+                            apiDone(Api.err("web".equals(area) ? "the TV only opens AroFlo, CNW, Tradezone and Ambrose pages (https), not " + (ja == null ? "" : ja.optString("url"))
                                     : "nothing on the TV knows how to do " + what).toString());
                             return;
                         }

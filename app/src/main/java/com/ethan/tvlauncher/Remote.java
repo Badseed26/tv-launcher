@@ -24,7 +24,8 @@ final class Remote {
     static final String TASK = "6j3H69pvQ9hQ86pX";
     private static final long EVERY_MS = 20000;
     /** After a command comes in, check every 3 s for 5 min so back and forth is quick (21/11), then back to 20 s. */
-    private static final long FAST_MS = 3000, FAST_FOR = 5 * 60 * 1000;
+    // 2 s for 10 min after a command (21/11, quicker web tab steps for Claude). Todoist allows about 1 call a second.
+    private static final long FAST_MS = 2000, FAST_FOR = 10 * 60 * 1000;
     private volatile long fastUntil;
     private static final String HELP = "Commands: wake, open filer, close filer, status, log, reload, press <button text>, code <number>, stay awake on, stay awake off, update, web remote, web remote new pin, check mail, test mail check, mail check on, mail check off, mail check opens on, mail check opens off, inbox pull <day>, lookup <terms; ...>, tv code, weather <town>, api {json}";
 
