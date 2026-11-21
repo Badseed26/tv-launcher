@@ -104,32 +104,26 @@ public class MainActivity extends Activity implements Ui.FocusListener {
         timeCol.addView(date, dlp);
         top.addView(timeCol);
 
-        // Live weather next to the clock (21/11). Hidden until a place is set with "weather <town>" on the Todoist remote.
+        // Live weather (21/11), under the buttons on the right so the top row never gets pushed wide. Hidden until a
+        // place is set with "weather <town>" on the Todoist remote.
         weatherCol = new LinearLayout(this);
-        weatherCol.setOrientation(LinearLayout.VERTICAL);
-        weatherCol.setClipChildren(false);
-        LinearLayout tempRow = new LinearLayout(this);
-        tempRow.setOrientation(LinearLayout.HORIZONTAL);
-        tempRow.setGravity(android.view.Gravity.BOTTOM);
-        weatherTemp = Ui.text(this, "", 44, Ui.TEXT_PRIMARY, Ui.LIGHT);
-        tempRow.addView(weatherTemp);
-        weatherPlace = Ui.text(this, "", 15, Ui.TEXT_SECONDARY, Ui.REGULAR);
-        LinearLayout.LayoutParams plp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        plp.leftMargin = Ui.dp(this, 12);
-        plp.bottomMargin = Ui.dp(this, 6);
-        tempRow.addView(weatherPlace, plp);
-        weatherCol.addView(tempRow);
-        weatherMore = Ui.text(this, "", 16, Ui.TEXT_SECONDARY, Ui.REGULAR);
+        weatherCol.setOrientation(LinearLayout.HORIZONTAL);
+        weatherCol.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        weatherTemp = Ui.text(this, "", 38, Ui.TEXT_PRIMARY, Ui.LIGHT);
+        weatherCol.addView(weatherTemp);
+        LinearLayout wText = new LinearLayout(this);
+        wText.setOrientation(LinearLayout.VERTICAL);
+        weatherPlace = Ui.text(this, "", 15, Ui.TEXT_PRIMARY, Ui.MEDIUM);
+        wText.addView(weatherPlace);
+        weatherMore = Ui.text(this, "", 15, Ui.TEXT_SECONDARY, Ui.REGULAR);
         LinearLayout.LayoutParams mlp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        mlp.topMargin = Ui.dp(this, 10);
-        weatherCol.addView(weatherMore, mlp);
-        LinearLayout.LayoutParams wlp = new LinearLayout.LayoutParams(
+        mlp.topMargin = Ui.dp(this, 6);
+        wText.addView(weatherMore, mlp);
+        LinearLayout.LayoutParams wtlp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        wlp.leftMargin = Ui.dp(this, 48);
-        wlp.topMargin = Ui.dp(this, 14);
-        top.addView(weatherCol, wlp);
+        wtlp.leftMargin = Ui.dp(this, 14);
+        weatherCol.addView(wText, wtlp);
         weatherCol.setVisibility(View.GONE);
 
         View spacer = new View(this);
@@ -185,7 +179,19 @@ public class MainActivity extends Activity implements Ui.FocusListener {
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         slp.leftMargin = Ui.dp(this, 14);
         buttons.addView(settings, slp);
-        top.addView(buttons, new LinearLayout.LayoutParams(
+        LinearLayout rightCol = new LinearLayout(this);
+        rightCol.setOrientation(LinearLayout.VERTICAL);
+        rightCol.setGravity(android.view.Gravity.END);
+        rightCol.setClipChildren(false);
+        rightCol.setClipToPadding(false);
+        rightCol.addView(buttons, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        LinearLayout.LayoutParams wlp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        wlp.topMargin = Ui.dp(this, 6);
+        wlp.rightMargin = Ui.dp(this, 14);
+        rightCol.addView(weatherCol, wlp);
+        top.addView(rightCol, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         content.addView(top, new LinearLayout.LayoutParams(

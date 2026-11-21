@@ -28,7 +28,7 @@ This repo is **public**: never put logins, PINs, tokens, IP addresses or the bus
 
 ## Talking to the TV
 1. **Todoist TV remote** (task `6j3H69pvQ9hQ86pX` in the job tracker's settings section). Add a comment with a
-   command; the TV polls every 20 s and answers with a comment starting `TV:`. Commands: wake, open filer,
+   command; the TV polls every 20 s (every 3 s for 5 min after a command, 21/11) and answers with a comment starting `TV:`. Commands: wake, open filer,
    close filer, status, log, reload, press <label>, code <n>, update, web remote, web remote new pin, check mail,
    test mail check, mail check on/off, mail check opens on/off, stay awake on/off, inbox pull <day>,
    lookup <terms; ...>, tv code (shows it), tv code <4 to 8 digits> (sets it), weather <town>, weather, weather off. The TV ignores anything over
@@ -57,7 +57,7 @@ This repo is **public**: never put logins, PINs, tokens, IP addresses or the bus
   (`Screen.tap/key` mark `Lock.remoteAt`), the Todoist remote and auto runs never ask. The code is `tv code <digits>`
   on the Todoist remote, kept in the app's own storage; until one's set it's the phone page PIN. New work apps go in
   as tiles on that menu. The phone page also has Wake TV.
-- `Weather` (21/11): live weather next to the clock on the home screen from Open-Meteo (no key), every 15 min. The
+- `Weather` (21/11): live weather under the home screen's buttons (beside the clock pushed the top row off screen) from Open-Meteo (no key), every 15 min. The
   place is set with `weather <town>` on the Todoist remote (kept in app storage, never in this public repo),
   `weather` shows it, `weather off` hides it. Nothing shows until a place is set.
 - `FilerActivity`: two hidden WebViews (Outlook and AroFlo) laid out at 1600x1000 pixels behind a dimmed,

@@ -23,6 +23,9 @@ final class Remote {
 
     static final String TASK = "6j3H69pvQ9hQ86pX";
     private static final long EVERY_MS = 20000;
+    /** After a command comes in, check every 3 s for 5 min so back and forth is quick (21/11), then back to 20 s. */
+    private static final long FAST_MS = 3000, FAST_FOR = 5 * 60 * 1000;
+    private volatile long fastUntil;
     private static final String HELP = "Commands: wake, open filer, close filer, status, log, reload, press <button text>, code <number>, stay awake on, stay awake off, update, web remote, web remote new pin, check mail, test mail check, mail check on, mail check off, mail check opens on, mail check opens off, inbox pull <day>, lookup <terms; ...>";
 
     private static Remote inst;
@@ -57,7 +60,7 @@ final class Remote {
                 check();
             } catch (Exception ignored) {
             }
-            bg.postDelayed(this, EVERY_MS);
+            bg.postDelayed(this, android.os.SystemClock.uptimeMillis() < fastUntil ? FAST_MS : EVERY_MS);
         }
     };
 
@@ -104,6 +107,7 @@ final class Remote {
             // lookups can come one a line: keep them apart
             final String cmd = text.toLowerCase(Locale.ROOT).startsWith("lookup")
                     ? text.replaceAll("[ \\t]+", " ").replaceAll("\\s*\\n\\s*", "; ") : text.replaceAll("\\s+", " ");
+            fastUntil = android.os.SystemClock.uptimeMillis() + FAST_FOR;
             handle(token, cmd);
         }
         prune(token, all);
