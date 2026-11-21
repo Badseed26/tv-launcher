@@ -114,10 +114,12 @@ ec.run(async function () {
       if (!S.want && A.url) S.want = A.url;
       ec.save();
       ec.log('landing page, pressing ' + ec.label(lb[0]));
+      var here = location.href;
       await ec.press(lb[0], { shots: false });
-      await settle(6000);
+      // it goes off to its sign in page (this runs again there), or a sign in box turns up here
+      await ec.waitFor(function () { return location.href != here || pwBox() || all('input[type=email]').some(vis); }, 15000, 300);
+      await settle(4000);
       if (ec.finished) return;
-      // same page changed in place: carry on below with the new page
       site = siteFor(location.host) || site;
     }
   }
@@ -135,6 +137,7 @@ ec.run(async function () {
     if (S.logins > 3) return ec.fail(site.name + ' keeps saying signed out after 3 goes');
     if (!S.want) S.want = location.href;
     ec.log(site.name + ' is signed out, going to its sign in page');
+    S.tried = true;
     ec.go(site.login);
     return;
   }
@@ -144,6 +147,7 @@ ec.run(async function () {
     if (!S.want && what == 'web.open' && A.url && A.url.indexOf(site.login || '\u0000') != 0) S.want = A.url;
     var r = ec.siteLogin(site.name);
     if (r != 'ok') return ec.fail(site.name + ' sign in: ' + r);
+    S.tried = true;
     S.loginStep = !pwBox(); // email first, password on the next step
     ec.log('signing in to ' + site.name + (S.loginStep ? ' (email step)' : ''));
     ec.save();
@@ -161,7 +165,7 @@ ec.run(async function () {
     if (pwBox()) { await ec.shot('sign in didn\'t take'); return ec.fail('the saved ' + site.name + ' login didn\'t get in (still asking for the password). Check it on the phone page', { pictures: 1 }); }
     await settle();
   }
-  if (S.want && !pwBox() && location.href != S.want) {
+  if (S.want && S.tried && !pwBox() && location.href != S.want && !/login|signin|b2c|oauth|authorize/i.test(location.href)) {
     var w = S.want; S.want = null; S.signedIn = true;
     ec.go(w);
     return;
