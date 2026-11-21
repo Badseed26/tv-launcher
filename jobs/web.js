@@ -52,6 +52,15 @@ ec.run(async function () {
     await ec.waitFor(function () { return !all('.spinner,.loading,[aria-busy=true],.mat-progress-spinner,.loader').some(vis); }, 4000, 150);
   };
 
+  // Cloudflare's "are you a bot" page (Tradezone, 21/11): it often clears by itself in a few seconds. If it wants a
+  // person to tick it, the job never does that: it says so and leaves the tab open for Ethan (phone page, tap the box).
+  var botCheck = function () { return /^Just a moment/i.test(document.title) || /Performing security verification|Verify you are human/i.test(document.body ? document.body.innerText.slice(0, 600) : ''); };
+  if (botCheck()) {
+    await ec.waitFor(function () { return !botCheck(); }, 15000, 500);
+    if (botCheck()) return ec.fail(location.host + ' is showing its bot check and wants a person to tick it. The TV never does that: Ethan can tick it from the phone page (the tab stays open ' + (A.keep || 5) + ' min), then it should stay clear for a while', { look: { url: location.href, title: document.title } });
+    ec.log('the bot check cleared by itself');
+  }
+
   // a page that's already been worked on this tab is settled: don't wait again
   if (window.__ecTab) await settle(800); else await settle(6000);
   window.__ecTab = true;

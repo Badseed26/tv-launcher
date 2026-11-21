@@ -153,6 +153,11 @@ Ethan wants everything doable from a chat with the PC off, using the TV as the c
   go in the Keystore (`Sites.java`, keys `site_<name>_user/pass`) and only the app reads them back: web.js spots a
   sign in page (or CNW's logged-out page), asks `ecApi.siteLogin(name)` and the TV fills it itself (one page or email
   then password, ticks remember me), at most 3 goes per site in 30 min. Then it goes back to the page it was after.
+- Tradezone (21/11): Cloudflare's bot check came up on the TV and didn't clear by itself (it wanted a person). The job
+  never ticks it: web.js waits 15 s, then fails saying so with the tab left open, so Ethan can tick it from the phone
+  page. CNW signed itself in and searched fine (21/11, "rcbo 20a", 1457 results at Oxenford).
+- Speed (21/11): a step on an open tab takes about 2 to 3 s on the TV; with the 2 s polling and the answers task the
+  whole loop is about 5 to 10 s. A fresh page (web.open) is 10 to 45 s depending on the site.
 - BridgeSelect is off on the TV (Ethan, 21/11, until he's shown Claude how): blocked in Sites.BLOCKED and the Runner.
 - Ambrose admin (tradiesadmin.ambroseconstruct.com.au, Ethan 21/11) is allowed: it's where reports are found. It has its
   own saved login slot. `web.ambrose {po}` (with args.url .../PurchaseOrders) searches the PO list, opens the PO, then
