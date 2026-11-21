@@ -136,8 +136,9 @@ ec.run(async function () {
   if (what == 'aroflo.run') {
     if (!A.js) return ec.fail('run needs js');
     ec.log('run: ' + String(A.js).slice(0, 400));
-    var AsyncFn = Object.getPrototypeOf(async function () {}).constructor;
-    var out = await new AsyncFn('ec', 'A', 'S', A.js)(ec, A, S);
+    var out;
+    if (typeof window.__ecRun == 'function') out = await window.__ecRun(ec, A, S);
+    else { var AsyncFn = Object.getPrototypeOf(async function () {}).constructor; out = await new AsyncFn('ec', 'A', 'S', A.js)(ec, A, S); }
     if (ec.finished || ec.leaving) return; // the code went to another page or answered itself
     return { ok: true, result: out === undefined ? null : out };
   }

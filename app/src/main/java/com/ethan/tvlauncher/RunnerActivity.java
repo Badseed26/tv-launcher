@@ -1087,6 +1087,11 @@ public class RunnerActivity extends Activity {
         String u = String.valueOf(web.getUrl()).replaceAll("[?#].*$", "");
         apiLine("page " + apiRuns + ": " + u);
         setNow("api " + job.api.optString("id") + ": working on " + u.replaceAll("^https://[^/]+", ""));
+        // *.run jobs: the TV puts the code on the page itself (Outlook's page won't let a script turn text into code).
+        // On its own, so a mistake in it can't stop the job code: the job then says the code didn't parse.
+        JSONObject ra = job.api.optJSONObject("args");
+        if (ra != null && ra.has("js") && job.api.optString("do").endsWith(".run"))
+            web.evaluateJavascript("window.__ecRun = async function (ec, A, S, svc, search, getItem) {\n" + ra.optString("js") + "\n};", null);
         web.evaluateJavascript(apiJs.replace("__TOKEN__", token).replace("__JOB__", jj.toString()), null);
     }
 

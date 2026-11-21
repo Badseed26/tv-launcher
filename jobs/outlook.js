@@ -169,8 +169,9 @@ ec.run(async function () {
   if (what == 'outlook.run') {
     if (!A.js) return ec.fail('run needs js');
     ec.log('run: ' + String(A.js).slice(0, 400));
-    var AsyncFn = Object.getPrototypeOf(async function () {}).constructor;
-    var out = await new AsyncFn('ec', 'A', 'svc', 'search', 'getItem', A.js)(ec, A, svc, search, getItem);
+    // the TV puts the code on the page as window.__ecRun (build 68 on); Outlook blocks turning text into code
+    if (typeof window.__ecRun != 'function') return ec.fail('the js didn\'t parse (or the TV is older than build 68)');
+    var out = await window.__ecRun(ec, A, ec.state, svc, search, getItem);
     if (ec.finished || ec.leaving) return;
     return { ok: true, result: out === undefined ? null : out, blocked: window.__ecOl.blocked };
   }
