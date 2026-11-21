@@ -27,6 +27,35 @@ window.ec = (function () {
   ec.file = function (name, b64, type) { api.file(TOKEN, String(name), String(b64), String(type || '')); };
   // A supplier or Ambrose sign in page: the TV fills the login Ethan saved on the phone page (the job never sees it)
   ec.siteLogin = function (name) { try { return api.siteLogin(TOKEN, String(name)); } catch (e) { return 'this TV build can\'t sign in to sites yet'; } };
+  // A file off AroFlo (photo or document path from aroflo.files), fetched by the app with the TV's AroFlo sign in.
+  // Works on any site's page, so a report on Ambrose can take AroFlo's photos. Gives back a File.
+  var got = {}, gotN = 0;
+  window.__ecGot = function (id, b64, type, err) { var f = got[id]; if (f) { delete got[id]; f(b64, type, err); } };
+  ec.grab = function (path, name) {
+    return new Promise(function (res, rej) {
+      var id = 'g' + (++gotN) + '_' + Date.now();
+      var timer = setTimeout(function () { delete got[id]; rej(new Error('AroFlo file took over 90 s: ' + name)); }, 90000);
+      got[id] = function (b64, type, err) {
+        clearTimeout(timer);
+        if (err || !b64) return rej(new Error('couldn\'t get ' + (name || 'the file') + ' off AroFlo: ' + (err || 'empty')));
+        var bin = atob(b64), u = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+        res(new File([u], name || 'file', { type: type || 'application/octet-stream' }));
+      };
+      api.grab(TOKEN, id, String(path));
+    });
+  };
+  // A photo shrunk to max px on its longest side (JPEG), for sending or for slow upload boxes
+  ec.shrink = async function (file, max) {
+    if (!/^image\//.test(file.type)) return file;
+    var bm = await createImageBitmap(file), k = Math.min(1, max / Math.max(bm.width, bm.height));
+    if (k === 1 && /jpe?g/.test(file.type)) return file;
+    var c = document.createElement('canvas'); c.width = Math.round(bm.width * k); c.height = Math.round(bm.height * k);
+    c.getContext('2d').drawImage(bm, 0, 0, c.width, c.height);
+    var blob = await new Promise(function (r) { c.toBlob(r, 'image/jpeg', 0.88); });
+    return new File([blob], String(file.name).replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' });
+  };
+  ec.b64 = function (blob) { return new Promise(function (res, rej) { var r = new FileReader(); r.onload = function () { res(String(r.result).split(',')[1]); }; r.onerror = rej; r.readAsDataURL(blob); }); };
   ec.sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
   ec.waitFor = async function (fn, ms, every) {
     var t0 = Date.now(); ms = ms || 10000;

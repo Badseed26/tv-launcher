@@ -133,6 +133,58 @@ ec.run(async function () {
     return { ok: true, from: iso(from).slice(0, 10), weeks: weeks, count: visits.length, visits: visits };
   }
 
+  // ---- documents and photos on a task (21/11). Same list AroFlo's Documents tab shows.
+  // aroflo.files {jn}: every photo and document with who, when, caption and its n (and its path for web.upload)
+  // aroflo.file {jn, n: [1,3] | name | all, max: 1600}: sends them to Claude as files on the remote (photos shrunk to
+  // max px so they're quick to look at, documents as they are). 8 at a time tops.
+  var taskCode = async function (jn) {
+    var hit = (await search(String(jn), 'JobNo')).filter(function (x) { return x.jn == String(jn); })[0];
+    var m = hit && /wrCoded=([^&]+)/i.exec(hit.href || '');
+    if (!m) throw new Error('JN ' + jn + ' not found in AroFlo');
+    return m[1];
+  };
+  var taskFiles = async function (code) {
+    var q = 'searchdocumenttype=task&idcoded=' + code + '&customfield_id=0&columns=document,comment,uploadedby,imgdatetimetaken,datetimeinserted' +
+      '&category_id=0&searchTaskBUs=childbus&_search=true&nd=' + Date.now() + '&rows=500&page=1&sidx=sortOrder&sord=asc';
+    var r = await fetch('/ims/Site/Documents/AJAX_JSON_search_documents.cfm?' + q, { credentials: 'include' });
+    var j; try { j = JSON.parse(await r.text()); } catch (e) { throw new Error('AroFlo didn\'t send the document list'); }
+    var txt = function (x) { return String(x == null ? '' : x).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(); };
+    return (j.rows || []).map(function (x, i) {
+      var name = txt(x.documentname);
+      return { n: i + 1, name: name, photo: /\.(jpe?g|png|heic|heif|webp|gif)$/i.test(name), by: txt(x.uploadedby),
+        when: txt(x.imgdatetimetaken) || txt(x.datetimeinserted), caption: txt(new DOMParser().parseFromString(String(x.comment || ''), 'text/html').body.textContent).slice(0, 200),
+        path: String(x.timedlinkoriginal || '') };
+    }).filter(function (x) { return x.path; });
+  };
+  if (what == 'aroflo.files') {
+    if (!A.jn) return ec.fail('files needs jn');
+    var fl = await taskFiles(await taskCode(A.jn));
+    var docs = fl.filter(function (x) { return !x.photo; }), pics = fl.filter(function (x) { return x.photo; });
+    return { ok: true, jn: A.jn, photos: pics.length, documents: docs.length,
+      files: fl.map(function (x) { return x.n + ' ' + (x.photo ? 'photo' : 'doc') + ' ' + x.name + ' | ' + x.when + ' | ' + x.by + (x.caption ? ' | ' + x.caption : ''); }),
+      paths: A.paths ? fl.map(function (x) { return x.path; }) : undefined };
+  }
+  if (what == 'aroflo.file') {
+    if (!A.jn) return ec.fail('file needs jn');
+    var fl2 = await taskFiles(await taskCode(A.jn)), want;
+    if (A.all) want = fl2;
+    else if (A.n) { var ns = [].concat(A.n).map(Number); want = fl2.filter(function (x) { return ns.indexOf(x.n) >= 0; }); }
+    else if (A.name) want = fl2.filter(function (x) { return x.name.toLowerCase().indexOf(String(A.name).toLowerCase()) >= 0; });
+    else return ec.fail('say which: n, name or all');
+    if (!want.length) return ec.fail('nothing matched');
+    var sent = [];
+    for (var i = 0; i < want.length && sent.length < 8; i++) {
+      var f = want[i];
+      var rr = await fetch(f.path, { credentials: 'include' });
+      if (!rr.ok) { ec.log('AroFlo said ' + rr.status + ' for ' + f.name); continue; }
+      var blob = await rr.blob(), file = new File([blob], f.name, { type: blob.type });
+      if (f.photo && A.max !== 0) file = await ec.shrink(file, Number(A.max) || 1600);
+      ec.file(file.name, await ec.b64(file), file.type);
+      sent.push(f.n + ' ' + f.name + ' (' + Math.round(file.size / 1024) + ' KB)');
+    }
+    return { ok: true, jn: A.jn, sent: sent, more: Math.max(0, want.length - sent.length) };
+  }
+
   if (what == 'aroflo.run') {
     if (!A.js) return ec.fail('run needs js');
     ec.log('run: ' + String(A.js).slice(0, 400));

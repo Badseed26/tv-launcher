@@ -12,6 +12,7 @@
 // web.scroll {y | ref}               scroll the page (px) or bring one thing into view
 // web.wait {text, ms}                wait for some text to show up
 // web.shot {label}                   a picture of the page, posted after the answer
+// web.upload {files: [{path, name, comment}], ref}  AroFlo photos or documents into this page's upload box
 // web.run {js}                       any bit of code on the page (ec, A, S), for anything the rest can't do
 // web.close                          close the tab now (the TV goes back how it was)
 // Every answer except web.text and web.run carries a fresh look at the page (a.look:false to skip it).
@@ -322,6 +323,69 @@ ec.run(async function () {
     return { did: got ? 'saw "' + a.text + '"' : 'never saw "' + a.text + '"', found: !!got };
   };
   ops.sleep = async function (a) { await ec.sleep(Math.min(Number(a.ms) || 1000, 20000)); return { did: 'waited' }; };
+  // upload {jn, n: [1,2,3] | photos: 'all', ref, comments: ['...', ...], max: 2560}: AroFlo photos or documents into this
+  // page's upload box (ref, or the one in an open dialog), straight from AroFlo, in batches of 4 (Ambrose crawls with
+  // more). On Ambrose's image box it waits for each batch, then fills each new card's comment and presses its Save
+  // comment (never a report save or submit). Paths come from aroflo.files with paths:true, or pass jn and the TV looks.
+  ops.upload = async function (a) {
+    var list = a.files || [];
+    if (!list.length) throw new Error('upload needs files: [{path, name, comment}] (aroflo.files with paths:true gives the paths)');
+    var inputFor = function () {
+      if (a.ref != null) { var x = target(a); if (x.type != 'file') throw new Error('ref ' + a.ref + ' isn\'t an upload box'); return x; }
+      var fs = all('input[type=file]');
+      var modal = fs.filter(function (i) { return i.closest('.blazored-modal, .bm-container, mat-dialog-container, .cdk-overlay-pane, .uppy-Dashboard, [role=dialog]'); });
+      return modal.filter(vis)[0] || modal[0] || fs.filter(vis)[0] || fs[fs.length - 1] || null;
+    };
+    var box = function () { return document.querySelector('.blazored-modal'); };
+    var cards = function () { var m = box(); return m ? [].slice.call(m.querySelectorAll('.image-wrap')) : []; };
+    var busy = function () { var m = box(); return !!m && (/Uploading/i.test(m.textContent) || !!m.querySelector('.spinner-border, .spinner, [role=progressbar]')); };
+    var did = [], commented = 0;
+    for (var b0 = 0; b0 < list.length; b0 += 4) {
+      var batch = list.slice(b0, b0 + 4), files = [];
+      for (var k = 0; k < batch.length; k++) {
+        var f = await ec.grab(batch[k].path, batch[k].name);
+        if (a.max !== 0 && /^image\//.test(f.type)) f = await ec.shrink(f, Number(a.max) || 2560);
+        files.push(f);
+      }
+      var inp = inputFor();
+      if (!inp) throw new Error('no upload box on the page (open the photos box first)');
+      var amb = !!box() && !!inp.closest('.blazored-modal'), before = cards().length;
+      var dt = new DataTransfer();
+      (inp.multiple ? files : files.slice(0, 1)).forEach(function (x) { dt.items.add(x); });
+      inp.files = dt.files;
+      inp.dispatchEvent(new Event('input', { bubbles: true }));
+      inp.dispatchEvent(new Event('change', { bubbles: true }));
+      ec.log('upload batch ' + (b0 / 4 + 1) + ': ' + files.map(function (x) { return x.name; }).join(', '));
+      if (amb) {
+        var t0 = Date.now(), sawBusy = false, idle = 0;
+        while (Date.now() - t0 < 5 * 60000) {
+          if (busy()) { sawBusy = true; idle = 0; } else idle = idle || Date.now();
+          var gotN = cards().length - before;
+          if (idle && Date.now() - idle > 2500 && (gotN >= dt.files.length || sawBusy || Date.now() - t0 > 20000)) break;
+          await ec.sleep(500);
+        }
+        var nowCards = cards().length - before;
+        did.push('batch ' + (b0 / 4 + 1) + ': ' + nowCards + ' of ' + dt.files.length + ' showing');
+        // comments only when the new cards line up exactly with what was sent
+        if (nowCards === dt.files.length) {
+          var newCards = cards().slice(-dt.files.length);
+          for (var c = 0; c < newCards.length; c++) {
+            var text = flat(batch[c].comment || '');
+            if (!text) continue;
+            var ci = newCards[c].querySelector('input:not([type=file]), textarea');
+            var sb = [].slice.call(newCards[c].querySelectorAll('button')).filter(function (b) { return /save comment/i.test(b.innerText); })[0];
+            if (!ci || !sb || flat(ci.value)) continue;
+            ec.fill(ci, text); await ec.sleep(250); sb.click(); await ec.sleep(700); commented++;
+          }
+        }
+      } else {
+        did.push('put ' + dt.files.length + ' file' + (dt.files.length > 1 ? 's' : '') + ' in the upload box');
+        await settle(4000);
+        if (!inp.multiple && files.length > 1) did.push('that box takes one file at a time, only the first went in');
+      }
+    }
+    return { did: did.join('; ') + (commented ? '; ' + commented + ' comments saved' : '') };
+  };
   ops.shot = async function (a) {
     if (a.ref != null || a.sel) target(a).scrollIntoView({ block: 'center' });
     await ec.shot(a.label || 'page');
@@ -346,7 +410,7 @@ ec.run(async function () {
     var steps = A.steps || [], did = S.did || [];
     for (var i = S.si || 0; i < steps.length; i++) {
       var st = steps[i], op = String(st.do || '').replace(/^web\./, '');
-      if (!ops[op]) return ec.fail('step ' + (i + 1) + ': can\'t do "' + st.do + '" in steps (look, press, fill, key, scroll, wait, sleep, shot)', { did: did });
+      if (!ops[op]) return ec.fail('step ' + (i + 1) + ': can\'t do "' + st.do + '" in steps (look, press, fill, key, scroll, wait, sleep, shot, upload)', { did: did });
       S.si = i + 1; S.did = did.concat([(i + 1) + ' ' + op + ' (moved page)']); ec.save();
       try { var r = await ops[op](st); did.push((i + 1) + ' ' + op + ': ' + (r.did || 'ok')); }
       catch (e) { did.push((i + 1) + ' ' + op + ': FAILED ' + e.message); var o = { did: did, look: look({ chars: 800, max: 40 }) }; if (S.pics) o.pictures = S.pics; return ec.fail('step ' + (i + 1) + ' failed: ' + e.message, o); }
@@ -357,7 +421,7 @@ ec.run(async function () {
 
   if (what == 'web.ambrose') return ambrose();
 
-  var one = { 'web.press': 'press', 'web.fill': 'fill', 'web.key': 'key', 'web.scroll': 'scroll', 'web.wait': 'wait', 'web.shot': 'shot' }[what];
+  var one = { 'web.press': 'press', 'web.fill': 'fill', 'web.key': 'key', 'web.scroll': 'scroll', 'web.wait': 'wait', 'web.shot': 'shot', 'web.upload': 'upload' }[what];
   if (one) {
     if (one == 'press') { S.acted = 'press'; ec.save(); }
     try { var res = await ops[one](A); }

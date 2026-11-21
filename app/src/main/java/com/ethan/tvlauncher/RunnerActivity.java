@@ -1349,6 +1349,54 @@ public class RunnerActivity extends Activity {
             });
         }
 
+        /**
+         * A photo or document off AroFlo, fetched by the app with the TV's AroFlo sign in (21/11), so a job on another site
+         * (an Ambrose report) can upload it. AroFlo only. Answers through window.__ecGot(id, b64, type, err).
+         */
+        @JavascriptInterface
+        public void grab(String t, final String id, final String path) {
+            if (!ok(t) || path == null) return;
+            final String url = path.startsWith("/") ? "https://office.aroflo.com" + path : path;
+            net.execute(new Runnable() {
+                @Override
+                public void run() {
+                    String b64 = null, type = "", err = null;
+                    try {
+                        if (!url.startsWith("https://office.aroflo.com/")) throw new Exception("only AroFlo files");
+                        JSONObject r = new JSONObject();
+                        r.put("method", "GET");
+                        r.put("url", url);
+                        JSONObject h = new JSONObject();
+                        String ck = CookieManager.getInstance().getCookie("https://office.aroflo.com/");
+                        if (ck != null) h.put("Cookie", ck);
+                        h.put("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+                        r.put("headers", h);
+                        r.put("timeout", 60000);
+                        JSONObject res = new JSONObject(Http.run(r.toString()));
+                        if (res.optBoolean("error")) throw new Exception(res.optString("message"));
+                        if (res.optInt("status") < 200 || res.optInt("status") >= 300) throw new Exception("AroFlo said " + res.optInt("status"));
+                        b64 = res.optString("b64");
+                        if (b64.length() > 22000000) throw new Exception("over 16 MB, too big");
+                        java.util.regex.Matcher m = java.util.regex.Pattern.compile("(?i)content-type\\W+([a-z]+/[a-z0-9.+-]+)").matcher(res.optString("headers"));
+                        if (m.find()) type = m.group(1);
+                        if (type.startsWith("text/html")) throw new Exception("AroFlo sent a page, not the file (signed out?)");
+                        apiLine("grabbed " + url.replaceAll("[?#].*$", "").replaceAll("^.*/", "") + " (" + (b64.length() * 3 / 4 / 1024) + " KB)");
+                    } catch (Exception e) {
+                        err = String.valueOf(e.getMessage());
+                        b64 = null;
+                    }
+                    final String js = "window.__ecGot&&window.__ecGot(" + JSONObject.quote(id) + "," + (b64 == null ? "null" : "\"" + b64 + "\"")
+                            + "," + JSONObject.quote(type) + "," + (err == null ? "null" : JSONObject.quote(err)) + ")";
+                    handler.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            if (web != null) web.evaluateJavascript(js, null);
+                        }
+                    });
+                }
+            });
+        }
+
         /** A supplier or Ambrose sign in page: the TV fills the saved login itself, the job code never sees it. */
         @JavascriptInterface
         public String siteLogin(String t, final String name) {

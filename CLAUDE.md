@@ -163,6 +163,12 @@ Ethan wants everything doable from a chat with the PC off, using the TV as the c
   own saved login slot. `web.ambrose {po}` (with args.url .../PurchaseOrders) searches the PO list, opens the PO, then
   Bookings, then the report link, ending on Tradies Web as an open tab; it stops with a look when there's a choice.
   Blazor pages that hang (error bar, lost connection, never loads) get reloaded, 4 goes tops. Settings pages stay blocked.
+- AroFlo documents and photos (21/11, same list as AroFlo's Documents tab, from AJAX_JSON_search_documents like the
+  EC AroFlo photo grab script): `aroflo.files {jn, paths}` lists them (n, photo or doc, name, when, who, caption),
+  `aroflo.file {jn, n | name | all, max}` sends them to Claude on the remote (photos shrunk to 1600 px). `web.upload
+  {files:[{path, name, comment}], ref}` (or a step) puts AroFlo files into the open page's upload box: the app fetches
+  each with the TV's AroFlo sign in (`ecApi.grab`, AroFlo only, 16 MB tops), batches of 4, and on Ambrose's image box
+  waits for each batch then saves each card's comment (only when the cards line up exactly). Build 80 on.
 - `web.steps {steps:[{do:'press',ref:4},{do:'fill',fields:[...]},{do:'wait',text:'Saved'}]}` runs several actions in one
   request (look, press, fill, key, scroll, wait, sleep, shot), carrying on after a page change, stopping at the first
   failure with a look. Use it whenever the next few steps are known, it saves a round trip each.
