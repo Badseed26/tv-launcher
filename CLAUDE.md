@@ -199,6 +199,9 @@ Ethan wants everything doable from a chat with the PC off, using the TV as the c
   before opening anything else, or the save gets cut off (a web.open straight after lost the lines once).
   Ethan wants his short names on the lines (22/11): pass them as `need` and call `apply` with `[skip, {short:true}]`
   (0.43 on). Part No still carries the supplier's code, so the script's Order and Reprice find the lines.
+  Tradezone (build 94 on): Cloudflare turns away the app's own requests even after Ethan ticks the check (the cookie
+  is tied to a real browser), so the script's Tradezone requests run as fetches on a hidden 1 pixel Tradezone page
+  (`tzFetch`, robots.txt as the page). If the check's back, web.open a Tradezone page so Ethan can tick it.
 - `RunnerActivity` runs api jobs (kind api) on its PC-size hidden page, full screen while they run, then back to how
   the TV was. With more jobs queued it stays open for them.
 - Verified 21/11 on build 63: tv.ping in ~10 s, aroflo.search "Four Mile" 21 s (signed itself in), aroflo.task 9530

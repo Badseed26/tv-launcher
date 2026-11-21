@@ -887,6 +887,7 @@ public class RunnerActivity extends Activity {
     }
 
     private void stopPage() {
+        tzStop();
         WebView w = web;
         web = null;
         if (cover != null) cover.setVisibility(View.VISIBLE);
@@ -947,6 +948,17 @@ public class RunnerActivity extends Activity {
         public void xhr(String t, final String id, final String req) {
             if (!ok(t)) return;
             final String ua = pageUa;
+            // Tradezone sits behind Cloudflare, which turns away the app's own requests: those go through a hidden
+            // Tradezone page instead, so they're a real browser's (22/11)
+            if (isTz(req)) {
+                handler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        tzFetch(id, req);
+                    }
+                });
+                return;
+            }
             net.execute(new Runnable() {
                 @Override
                 public void run() {
@@ -967,6 +979,113 @@ public class RunnerActivity extends Activity {
         }
     }
 
+
+    // ---------------------------------------------------------------- Tradezone helper page (22/11)
+
+    private WebView tzWeb;
+    private boolean tzReady;
+    private final List<String[]> tzQueue = new ArrayList<>();
+
+    private static boolean isTz(String req) {
+        try {
+            String u = new JSONObject(req).optString("url");
+            return u.startsWith("https://www.tradezone.com.au/");
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /** A Tradezone request from the supplier script, run as a fetch on a hidden Tradezone page. Main thread. */
+    private void tzFetch(String id, String req) {
+        if (!alive) return;
+        if (tzReady && tzWeb != null) {
+            tzRun(id, req);
+            return;
+        }
+        tzQueue.add(new String[]{id, req});
+        if (tzWeb != null) return;
+        WebView w = new WebView(this);
+        WebSettings st = w.getSettings();
+        st.setJavaScriptEnabled(true);
+        st.setDomStorageEnabled(true);
+        if (pageUa != null) st.setUserAgentString(pageUa);
+        CookieManager.getInstance().setAcceptThirdPartyCookies(w, true);
+        if (Build.VERSION.SDK_INT >= 26) w.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false);
+        w.addJavascriptInterface(new TzBridge(), "ecTz");
+        w.setWebViewClient(new WebViewClient() {
+            @Override
+            public void onPageFinished(WebView view, String u) {
+                if (view != tzWeb || tzReady || u == null || !u.startsWith("https://www.tradezone.com.au/")) return;
+                tzReady = true;
+                apiLine("Tradezone helper page ready");
+                for (String[] q : new ArrayList<>(tzQueue)) tzRun(q[0], q[1]);
+                tzQueue.clear();
+            }
+        });
+        // on screen but 1 pixel and see through, so the TV keeps it running
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(1, 1);
+        w.setAlpha(0f);
+        webHolder.addView(w, lp);
+        tzWeb = w;
+        tzReady = false;
+        w.loadUrl("https://www.tradezone.com.au/robots.txt");
+        handler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                if (tzReady || tzQueue.isEmpty()) return;
+                String err = "{\"error\":true,\"message\":\"Tradezone page didn't load\"}";
+                for (String[] q : new ArrayList<>(tzQueue)) gmDone(q[0], err);
+                tzQueue.clear();
+            }
+        }, 40000);
+    }
+
+    private void tzRun(String id, String req) {
+        String js = "(async function(){var T=" + JSONObject.quote(token) + ",I=" + JSONObject.quote(id) + ";try{var o=" + req + ";"
+                + "var h={};Object.keys(o.headers||{}).forEach(function(k){if(!/^(user-agent|cookie|host|content-length)$/i.test(k))h[k]=o.headers[k];});"
+                + "var body;if(o.b64){var bn=atob(o.b64),u=new Uint8Array(bn.length);for(var i=0;i<bn.length;i++)u[i]=bn.charCodeAt(i);body=u;}else if(o.body!=null)body=o.body;"
+                + "var ac=new AbortController();setTimeout(function(){ac.abort();},o.timeout||60000);"
+                + "var r=await fetch(o.url,{method:o.method||'GET',headers:h,body:(o.method||'GET').toUpperCase()=='GET'?undefined:body,credentials:'include',redirect:'follow',signal:ac.signal});"
+                + "var b=new Uint8Array(await r.arrayBuffer()),s='';for(var j=0;j<b.length;j+=0x8000)s+=String.fromCharCode.apply(null,b.subarray(j,j+0x8000));"
+                + "var hs=[];r.headers.forEach(function(v,k){hs.push(k+': '+v);});"
+                + "ecTz.done(T,I,JSON.stringify({status:r.status,statusText:r.statusText,headers:hs.join('\\r\\n'),url:r.url,b64:btoa(s)}));"
+                + "}catch(e){ecTz.done(T,I,JSON.stringify({error:true,timeout:e&&e.name=='AbortError',message:String(e&&e.message||e)}));}})();";
+        tzWeb.evaluateJavascript(js, null);
+    }
+
+    private void gmDone(String id, String res) {
+        if (web != null) web.evaluateJavascript("window.__ecGmDone&&window.__ecGmDone(" + JSONObject.quote(id) + "," + res + ")", null);
+    }
+
+    private final class TzBridge {
+        @JavascriptInterface
+        public void done(String t, final String id, final String json) {
+            if (!alive || !token.equals(t)) return;
+            handler.post(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        gmDone(id, new JSONObject(json).toString());
+                    } catch (Exception e) {
+                        gmDone(id, "{\"error\":true,\"message\":\"bad answer from the Tradezone page\"}");
+                    }
+                }
+            });
+        }
+    }
+
+    private void tzStop() {
+        WebView w = tzWeb;
+        tzWeb = null;
+        tzReady = false;
+        tzQueue.clear();
+        if (w == null) return;
+        try {
+            webHolder.removeView(w);
+            w.destroy();
+        } catch (Exception ignored) {
+        }
+    }
 
     // ---------------------------------------------------------------- api jobs (21/11, see Api.java)
 
