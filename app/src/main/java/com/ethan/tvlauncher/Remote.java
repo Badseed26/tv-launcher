@@ -187,6 +187,13 @@ final class Remote {
                     // Try 2: a screen that asks Android to switch the TV on as it opens
                     if (!screenOn) WakeActivity.start(c, false);
                     reply = screenOn ? "TV was already on." : "Turning the TV on. Send status in a few seconds to check.";
+                } else if (lc.equals("link") || lc.startsWith("link ")) {
+                    // the relay link for Claude's connector (22/11): "link <relay url> <code>" pairs, "link" says how it's going
+                    String[] parts = cmd.trim().split("\\s+");
+                    if (parts.length == 1) reply = Link.status(c);
+                    else if (parts[1].equalsIgnoreCase("off")) reply = Link.off(c);
+                    else if (parts.length >= 3) reply = Link.pair(c, parts[1], parts[2]);
+                    else reply = "Link: send link <relay url> <code> (Claude makes the code).";
                 } else if (lc.equals("weather") || lc.startsWith("weather ")) {
                     // Home screen weather (21/11): "weather <town>" sets the place, "weather off" hides it
                     final String town = cmd.trim().substring(7).trim();

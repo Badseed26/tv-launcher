@@ -182,8 +182,39 @@ final class RemoteServer {
         }
     }
 
+    private static final ThreadLocal<Boolean> trusted = new ThreadLocal<>();
+
+    /** Paths the relay link (Link.java) may use. Never logins, PIN or the login page. */
+    private static final java.util.Set<String> LINK_OK = new java.util.HashSet<>(java.util.Arrays.asList(
+            "/api/status", "/api/shot", "/api/view", "/api/tap", "/api/type", "/api/key", "/api/scroll", "/api/cmd"));
+
+    /**
+     * The relay link (22/11) runs the phone page's own actions here, already trusted (it signed in to the relay with
+     * the TV's pairing key). Gives back {status, type, body bytes}.
+     */
+    static Object[] local(String method, String path, Map<String, String> a) throws Exception {
+        RemoteServer r = running;
+        if (r == null) throw new Exception("the phone page server isn't running");
+        if (!LINK_OK.contains(path)) throw new Exception("not allowed: " + path);
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        trusted.set(true);
+        try {
+            r.route(out, method, path, a, null);
+        } finally {
+            trusted.set(false);
+        }
+        byte[] all = out.toByteArray();
+        int i = 0;
+        while (i + 3 < all.length && !(all[i] == 13 && all[i + 1] == 10 && all[i + 2] == 13 && all[i + 3] == 10)) i++;
+        String head = new String(all, 0, Math.min(i, all.length), StandardCharsets.UTF_8);
+        int code = Integer.parseInt(head.split(" ")[1]);
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("(?i)Content-Type: ([^\\r\\n;]+)").matcher(head);
+        byte[] body = i + 4 <= all.length ? java.util.Arrays.copyOfRange(all, i + 4, all.length) : new byte[0];
+        return new Object[] {code, m.find() ? m.group(1) : "", body};
+    }
+
     private void route(OutputStream out, String method, String path, Map<String, String> a, String cookie) throws Exception {
-        boolean authed = authed(cookie);
+        boolean authed = Boolean.TRUE.equals(trusted.get()) || authed(cookie);
         if (path.equals("/login") && method.equals("POST")) {
             long now = System.currentTimeMillis();
             if (now - failStart > 10 * 60000) {

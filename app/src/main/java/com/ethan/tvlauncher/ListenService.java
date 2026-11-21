@@ -77,6 +77,7 @@ public class ListenService extends Service {
         super.onCreate();
         Crash.install(this); // crash traces to Todoist, safe mode after 2 crashes (21/11)
         RemoteServer.start(this); // the phone remote page, over Tailscale
+        Link.start(this); // the relay link for Claude's connector (22/11)
         HandlerThread t = new HandlerThread("listen-beat");
         t.start();
         bg = new Handler(t.getLooper());

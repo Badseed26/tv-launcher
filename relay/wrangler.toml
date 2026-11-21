@@ -1,0 +1,14 @@
+# EC TV relay (22/11): Claude's MCP connector on one side, the TV's long poll on the other.
+# Deployed by .github/workflows/relay.yml. Secrets (never in this public repo): OWNER_PASSWORD, set by the workflow.
+name = "ec-tv-relay"
+main = "src/index.js"
+compatibility_date = "2025-09-01"
+workers_dev = true
+
+[[durable_objects.bindings]]
+name = "HUB"
+class_name = "Hub"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Hub"]

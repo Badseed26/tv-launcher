@@ -195,6 +195,22 @@ Ethan wants everything doable from a chat with the PC off, using the TV as the c
 - `Crash.java`: any crash's trace is posted on the remote next start. Two crashes in 10 min = safe mode (api jobs
   paused, everything else runs). A new build or tv.safe {off:true} clears it.
 
+## The relay and Claude's connector (22/11)
+Faster than Todoist: Claude's custom MCP connector talks to a Cloudflare Worker (`relay/`, Durable Object "hub"), and
+the TV keeps a long poll open to it (`Link.java`), so a tool call reaches the TV in well under a second.
+- Deploys from `.github/workflows/relay.yml` on pushes to `relay/` (needs repo secrets CLOUDFLARE_API_TOKEN,
+  CLOUDFLARE_ACCOUNT_ID, OWNER_PASSWORD). The Worker's address is in the deploy log; it's kept out of this repo.
+- Sign in: OAuth with dynamic client registration; the sign in page takes Ethan's OWNER_PASSWORD (5 wrong tries locks
+  it 15 min). Only Claude's own callback addresses can register. Tokens are stored hashed; access 24 h, refresh 60 days.
+- Tools: tv_screen (picture), tv_tap, tv_type, tv_key, tv_scroll, tv_status, tv_filer, tv_view, tv_job (any api job,
+  waits for the answer, pictures come back as images), tv_wait, tv_pictures, tv_pair.
+- Pairing: tv_pair gives a line to send on the Todoist remote (`link <relay url> <code>`, 15 min, 5 tries). The TV swaps
+  the code for its own key (Keystore). `link` says how the link's going, `link off` unpairs.
+- The TV side only runs the phone page's own actions (`RemoteServer.local`, never logins or the PIN) and api jobs, so
+  every block on those still applies. If the TV's not connected, the tools say so: use the Todoist remote.
+- Tested 22/11 locally (wrangler dev, fake TV): OAuth, wrong password, bad redirect, PKCE, refresh, pairing, all tools,
+  30 to 70 ms per call.
+
 ## AroFlo session limit
 AroFlo caps how many devices can be signed in as one user. When Ethan signs in elsewhere, the TV gets the User
 Session Limit page. Pressing CONTINUE on the TV does NOT sign his PC or phone out (Ethan, 21/11), so the Filer presses

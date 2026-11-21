@@ -10,6 +10,8 @@ import android.util.Base64;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.util.Map;
+
 import java.io.File;
 import java.io.FileOutputStream;
 import java.nio.charset.StandardCharsets;
@@ -173,9 +175,22 @@ final class Api {
     // ---------------------------------------------------------------- going out
 
     /** The Runner's done with a job: keep the log, remember the key, answer on Todoist, then the next job. */
+    /** The relay link waits on a job's answer through this (22/11). */
+    interface Waiter {
+        void done(JSONObject result);
+    }
+
+    private static final Map<String, Waiter> waiters = new java.util.concurrent.ConcurrentHashMap<>();
+
+    static void onDone(String id, Waiter w) {
+        if (w == null) waiters.remove(id);
+        else waiters.put(id, w);
+    }
+
     static void finished(final Context c, JSONObject req, JSONObject result, String log) {
         running = null;
         final String id = req.optString("id");
+
         boolean ok = result.optBoolean("ok") && !result.has("err");
         try {
             result.put("ok", ok);
@@ -183,6 +198,11 @@ final class Api {
         } catch (Exception ignored) {
         }
         saveLog(c, id, req, result, log);
+        Waiter w = waiters.remove(id);
+        if (w != null) try {
+            w.done(result);
+        } catch (Exception ignored) {
+        }
         String key = req.optString("key");
         if (ok && !key.isEmpty() && !req.optBoolean("dry")) {
             synchronized (Api.class) {

@@ -1,0 +1,30 @@
+name: Deploy relay
+
+# The Cloudflare relay for Claude's connector (22/11). Needs three repo secrets: CLOUDFLARE_API_TOKEN (Edit Cloudflare
+# Workers), CLOUDFLARE_ACCOUNT_ID and OWNER_PASSWORD (the password for the connector's sign in page).
+on:
+  push:
+    branches: [main]
+    paths: ['relay/**', '.github/workflows/relay.yml']
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Deploy
+        working-directory: relay
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          OWNER_PASSWORD: ${{ secrets.OWNER_PASSWORD }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "The Cloudflare secrets aren't set on the repo yet"; exit 1
+          fi
+          npx --yes wrangler@4 deploy
+          if [ -n "$OWNER_PASSWORD" ]; then printf '%s' "$OWNER_PASSWORD" | npx --yes wrangler@4 secret put OWNER_PASSWORD; fi
