@@ -500,14 +500,14 @@ ec.run(async function () {
     // the bookings table: Booking Type, Status, Start Date, End Date, Images, Reports, Open In Tradies
     var tbl = all('table').filter(function (t) { return /Booking Type/i.test(t.innerText) && /Open In Tradies/i.test(t.innerText); })[0];
     if (!tbl) return answer({ did: 'Bookings opened but no bookings table, have a look', steps: S.amb });
-    var heads = [].slice.call(tbl.querySelectorAll('th')).map(function (h) { return flat(h.innerText).toLowerCase(); });
+    var heads = [].slice.call(tbl.querySelectorAll('thead th, thead td')).map(function (h) { return flat(h.textContent).toLowerCase(); });
     var col = function (name) { for (var i = 0; i < heads.length; i++) if (heads[i].indexOf(name) >= 0) return i; return -1; };
     var rows = [].slice.call(tbl.querySelectorAll('tbody tr')).filter(function (r) { return r.querySelectorAll('td').length >= 6; });
     var books = rows.map(function (r, i) {
-      var td = r.querySelectorAll('td'), get = function (n) { var k = col(n); return k >= 0 && td[k] ? flat(td[k].innerText) : ''; };
+      var td = r.querySelectorAll('td'), get = function (n) { var k = col(n); return k >= 0 && td[k] ? flat(td[k].textContent) : ''; };
       var next = r.nextElementSibling, cm = next && next.querySelectorAll('td').length < 3 ? flat(next.innerText).replace(/^Comments:\s*/i, '') : '';
       return { n: i + 1, type: get('booking type'), status: get('status'), start: get('start'), end: get('end'),
-        images: get('images').replace(/^warning\s*/i, ''), report: get('report'), comments: cm };
+        images: get('images').replace(/^warning\s*/i, ''), report: get('report'), done: get('complete'), comments: cm };
     });
     note(books.length + ' bookings');
     // open {booking: n, open: 'images' | 'report' | 'tradies'}: press that booking's link (script click, like Ambrose wants)
@@ -517,13 +517,15 @@ ec.run(async function () {
       var which = { images: 'images', report: 'report', tradies: 'open in tradies' }[String(A.open)];
       if (!which || col(which) < 0) return ec.fail('open wants images, report or tradies');
       var cell = r0.querySelectorAll('td')[col(which)];
-      var hit = cell.querySelector('a, button, [role=button], .pointer-enabled, .pointer, span') || cell;
-      var said = flat(hit.innerText);
+      var hit = cell.querySelector('a[href], button, [role=button], .btn, .pointer-enabled, .pointer') || cell;
+      var said = flat(hit.textContent);
       if (/^N\/?A$/i.test(said) || !said) return answer({ did: 'booking ' + A.booking + ' has no ' + A.open + ' to open', bookings: books, steps: S.amb });
       if (WEB_BLOCK.test(said)) return ec.fail('not pressing "' + said + '"');
       S.opened = A.open + ' on booking ' + A.booking + ' (' + books[A.booking - 1].type + ')'; ec.save();
       note('opening ' + S.opened);
       var before = location.href;
+      // a plain link (Go to Tradies, a report): just go there, it'd open a new window otherwise
+      if (hit.tagName == 'A' && /^https:\/\//.test(hit.href)) { ec.go(hit.href); return; }
       await ec.press(hit, { script: true, shots: false });
       await ec.waitFor(function () { return location.href != before || document.querySelector('.blazored-modal'); }, 15000, 300);
       await settle(4000);
