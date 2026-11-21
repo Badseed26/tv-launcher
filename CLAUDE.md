@@ -197,6 +197,8 @@ Ethan wants everything doable from a chat with the PC off, using the TV as the c
   existing folders 19 s (script 0.42 fixed finding those folders), the whole quote (scope, folders, pricing, save,
   re-read) about 2 min on a clean run against 25 min plus by hand. After Save Quote, wait for the page to come back
   before opening anything else, or the save gets cut off (a web.open straight after lost the lines once).
+  Ethan wants his short names on the lines (22/11): pass them as `need` and call `apply` with `[skip, {short:true}]`
+  (0.43 on). Part No still carries the supplier's code, so the script's Order and Reprice find the lines.
 - `RunnerActivity` runs api jobs (kind api) on its PC-size hidden page, full screen while they run, then back to how
   the TV was. With more jobs queued it stays open for them.
 - Verified 21/11 on build 63: tv.ping in ~10 s, aroflo.search "Four Mile" 21 s (signed itself in), aroflo.task 9530
