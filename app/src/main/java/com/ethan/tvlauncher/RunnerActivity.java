@@ -1451,7 +1451,9 @@ public class RunnerActivity extends Activity {
     private void doSiteLogin(String[] site) {
         WebView w = web;
         if (w == null || site == null) return;
-        if (Sites.byHost(host(w.getUrl())) == null && !host(w.getUrl()).contains("login") && !host(w.getUrl()).contains("b2c")) return;
+        // the site itself, or its sign in host (Auth0 for Ambrose admin, 21/11, or a login or b2c host)
+        String hh = host(w.getUrl());
+        if (Sites.byHost(hh) == null && !hh.matches("(?i).*(login|b2c|auth0\\.com|\\.auth\\.).*")) return;
         try {
             JSONObject c = new JSONObject();
             c.put("user", Secrets.get(this, Sites.userKey(site[0])));

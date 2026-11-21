@@ -131,7 +131,7 @@ ec.run(async function () {
 
   // ---- supplier and Ambrose sign in: the TV fills the login Ethan saved on the phone page
   var onLoginPage = !!pwBox() || (site && site.login && location.href.indexOf(site.login) == 0) ||
-    (S.loginStep && all('input[type=email],input[type=text]').some(vis) && /sign ?in|log ?in/i.test(ec.text().slice(0, 3000)));
+    ((S.loginStep || /auth0\.com|login|b2c/i.test(location.host)) && all('input[type=email],input[type=text]').some(vis) && /sign ?in|log ?in|email/i.test(ec.text().slice(0, 3000)));
   if (site && !onLoginPage && site.out() && site.login) {
     S.logins = (S.logins || 0) + 1;
     if (S.logins > 3) return ec.fail(site.name + ' keeps saying signed out after 3 goes');
@@ -464,6 +464,11 @@ ec.run(async function () {
     if (!/^\d{8}(-\d{2,3})?$/.test(po)) return ec.fail('po wants the Ambrose PO number, like 20332055 or 20332055-07');
     if (/tradies\.ambrosebuilding/.test(location.host)) return answer({ did: 'on Tradies Web for PO ' + po, steps: S.amb });
     if (!/tradiesadmin/.test(location.host)) return ec.fail('not on Ambrose admin (' + location.host + ')');
+    // just pressed LOG IN: it's on its way to the sign in page, let it go (this runs again there)
+    if (S.landed && !S.tried && !/^\/PurchaseOrders/i.test(location.pathname)) {
+      await ec.waitFor(function () { return !/tradiesadmin/.test(location.host); }, 20000, 300);
+      if (!/tradiesadmin/.test(location.host)) return;
+    }
     S.amb = S.amb || [];
     var note = function (x) { S.amb.push(x); ec.log(x); ec.save(); };
     var rowText = function (r) { return flat(r.innerText); };
