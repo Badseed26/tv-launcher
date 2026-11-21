@@ -14,6 +14,7 @@
 // web.shot {label}                   a picture of the page, posted after the answer
 // web.upload {files: [{path, name, comment}], ref}  AroFlo photos or documents into this page's upload box
 // web.run {js}                       any bit of code on the page (ec, A, S), for anything the rest can't do
+// web.sup {fn, args} | {calls}       the AroFlo supplier items script's quote bridge, on an open AroFlo quote (build 93 on)
 // web.close                          close the tab now (the TV goes back how it was)
 // Every answer except web.text and web.run carries a fresh look at the page (a.look:false to skip it).
 ec.run(async function () {
@@ -576,6 +577,39 @@ ec.run(async function () {
       return answer({ did: 'opened ' + S.opened, modal: !!document.querySelector('.blazored-modal'), steps: S.amb });
     }
     return answer({ did: 'PO ' + po + ': ' + books.length + ' bookings. Open one with booking: n and open: images, report or tradies', bookings: books, steps: S.amb });
+  }
+
+  // web.sup {fn, args} or {calls: [{fn, args}, ...]}: the AroFlo supplier items script's quote bridge (ec-userscripts,
+  // ping, search, candidates, choose, apply, lines, setValue). The TV puts the script on the quote page with its own
+  // stand-in for Tampermonkey, so the CNW and Tradezone searches go through the app (22/11), not the page's timers.
+  // The script never saves: press Save Quote after (web.run).
+  if (what == 'web.sup') {
+    if (!/office\.aroflo\.com$/.test(location.host) || !/\/Quotes\//i.test(location.pathname)) return ec.fail('web.sup only runs on an AroFlo quote page (web.open the quote first)');
+    var supCall = function (fn, args, ms) {
+      return new Promise(function (res, rej) {
+        var id = 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), t;
+        var on = function (e) {
+          var d; try { d = JSON.parse(e.detail); } catch (x) { return; }
+          if (d.id != id) return;
+          clearTimeout(t); document.removeEventListener('ec-sup-reply', on);
+          if (d.err) rej(new Error(d.err)); else res(d.r);
+        };
+        t = setTimeout(function () { document.removeEventListener('ec-sup-reply', on); rej(new Error(fn + ' got no answer in ' + Math.round(ms / 1000) + ' s')); }, ms);
+        document.addEventListener('ec-sup-reply', on);
+        document.dispatchEvent(new CustomEvent('ec-sup-call', { detail: JSON.stringify({ id: id, fn: fn, args: args || [] }) }));
+      });
+    };
+    var v = null;
+    for (var k = 0; k < 10 && !v; k++) { try { v = await supCall('ping', [], 1500); } catch (e) { await ec.sleep(800); } }
+    if (!v) return ec.fail('the supplier items script didn\'t load on the quote page (needs build 93 or later)');
+    var calls = A.calls || [{ fn: A.fn || 'ping', args: A.args || [] }], outs = [];
+    for (var c = 0; c < calls.length; c++) {
+      var t0 = Date.now();
+      try { outs.push({ fn: calls[c].fn, ms: 0, r: await supCall(calls[c].fn, calls[c].args, (A.timeout || 170) * 1000) }); }
+      catch (e) { return ec.fail(calls[c].fn + ': ' + (e.message || e), { v: v.v, done: outs }); }
+      outs[outs.length - 1].ms = Date.now() - t0;
+    }
+    return { ok: true, v: v.v, out: outs.length == 1 ? outs[0] : outs };
   }
 
   if (what == 'web.run') {

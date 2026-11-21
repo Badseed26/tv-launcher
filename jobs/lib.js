@@ -69,6 +69,7 @@ window.ec = (function () {
       setTimeout(r, ms);
     });
   };
+  window.__ecSleep = ec.sleep; // for userscripts the TV puts on the page (the supplier items script, 22/11)
   ec.waitFor = async function (fn, ms, every) {
     var t0 = Date.now(); ms = ms || 10000;
     while (Date.now() - t0 < ms) { try { var v = fn(); if (v) return v; } catch (e) {} await ec.sleep(every || 250); }

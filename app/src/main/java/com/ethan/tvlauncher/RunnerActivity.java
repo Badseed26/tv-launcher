@@ -57,6 +57,8 @@ public class RunnerActivity extends Activity {
 
     private static final String PULL_URL =
             "https://raw.githubusercontent.com/Badseed26/ec-userscripts/main/src/ec-inbox-pull.js";
+    private static final String SUP_URL =
+            "https://raw.githubusercontent.com/Badseed26/ec-userscripts/main/src/aroflo-supplier-items.js";
     // 20/11: the AroFlo side (calendar and lookups) loads from GitHub like the Inbox Pull, so a fix to it is live on the
     // next run without a new build. The copy built into the app is the fallback.
     private static final String AF_URL =
@@ -814,6 +816,7 @@ public class RunnerActivity extends Activity {
         java.util.regex.Matcher m = java.util.regex.Pattern.compile("Chrome/([\\d.]+)").matcher(def);
         st.setUserAgentString("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/"
                 + (m.find() ? m.group(1) : "120.0.0.0") + " Safari/537.36");
+        pageUa = st.getUserAgentString();
         CookieManager.getInstance().setAcceptCookie(true);
         CookieManager.getInstance().setAcceptThirdPartyCookies(w, true);
         if (Build.VERSION.SDK_INT >= 26) w.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false);
@@ -943,10 +946,11 @@ public class RunnerActivity extends Activity {
         @JavascriptInterface
         public void xhr(String t, final String id, final String req) {
             if (!ok(t)) return;
+            final String ua = pageUa;
             net.execute(new Runnable() {
                 @Override
                 public void run() {
-                    final String res = Http.run(req);
+                    final String res = supplierCookies(req, ua);
                     handler.post(new Runnable() {
                         @Override
                         public void run() {
@@ -970,7 +974,7 @@ public class RunnerActivity extends Activity {
             "(?i)(siteadmin|site_admin|/admin/|/administration|usermanagement|/settings/)");
     private static final String JOBS_RAW = "https://raw.githubusercontent.com/Badseed26/tv-launcher/";
     private Job carry;
-    private String apiJs, apiState, apiHook;
+    private String apiJs, apiState, apiHook, supJs, pageUa;
     private final java.util.List<String[]> apiFiles = new java.util.ArrayList<>();
     private final StringBuilder apiLog = new StringBuilder();
     private int apiShots, apiRuns;
@@ -1006,6 +1010,8 @@ public class RunnerActivity extends Activity {
                 final String code = jobCode(area, req.optString("branch", "main"), false);
                 // Outlook jobs: a hook that runs before Outlook's own code, catching its sign-in and blocking every mailbox write
                 apiHook = null;
+                // web.sup: the AroFlo supplier items script goes on the quote page too (22/11)
+                if ("web.sup".equals(what)) supJs = loadSup();
                 if ("outlook".equals(area)) {
                     try {
                         apiHook = jobFile("jobs/outlook-hook.js", req.optString("branch", "main"));
@@ -1163,6 +1169,9 @@ public class RunnerActivity extends Activity {
         JSONObject ra = job.api.optJSONObject("args");
         if (ra != null && ra.has("js") && job.api.optString("do").endsWith(".run"))
             web.evaluateJavascript("window.__ecRun = async function (ec, A, S, svc, search, getItem) {\n" + ra.optString("js") + "\n};", null);
+        // web.sup: Ethan's supplier items script on the quote page, in the Tampermonkey stand-in (once a page)
+        if ("web.sup".equals(job.api.optString("do")) && supJs != null && u.startsWith("https://office.aroflo.com/"))
+            web.evaluateJavascript(shimJs.replace("__TOKEN__", token).replace("__VER__", versionOf(supJs)).replace("__SCRIPT__", supJs), null);
         web.evaluateJavascript(apiJs.replace("__TOKEN__", token).replace("__JOB__", jj.toString()), null);
     }
 
@@ -1566,6 +1575,58 @@ public class RunnerActivity extends Activity {
     }
 
     // ---------------------------------------------------------------- bits
+
+    /**
+     * The supplier script's requests to CNW and Tradezone go with the TV's own sign in for that site (the cookies the
+     * web tabs got, and the same browser name), and any new cookies go back, like Tampermonkey does on the PC (22/11).
+     * Every other request goes as it is.
+     */
+    private static String supplierCookies(String reqJson, String ua) {
+        String url = "";
+        try {
+            JSONObject r = new JSONObject(reqJson);
+            url = r.optString("url");
+            String host = android.net.Uri.parse(url).getHost();
+            if (!url.startsWith("https://") || host == null || !host.matches("(?i)(shop\\.cnw\\.com\\.au|www\\.tradezone\\.com\\.au)"))
+                return Http.run(reqJson);
+            JSONObject h = r.optJSONObject("headers");
+            if (h == null) h = new JSONObject();
+            String ck = CookieManager.getInstance().getCookie(url);
+            if (ck != null && !ck.isEmpty()) h.put("Cookie", ck);
+            if (ua != null && !h.has("User-Agent")) h.put("User-Agent", ua);
+            r.put("headers", h);
+            String res = Http.run(r.toString());
+            JSONObject o = new JSONObject(res);
+            for (String line : o.optString("headers").split("\r\n")) {
+                int c = line.indexOf(':');
+                if (c > 0 && line.substring(0, c).trim().equalsIgnoreCase("set-cookie"))
+                    CookieManager.getInstance().setCookie(o.optString("url", url), line.substring(c + 1).trim());
+            }
+            return res;
+        } catch (Exception e) {
+            return Http.run(reqJson);
+        }
+    }
+
+    /** Newest AroFlo supplier items script from GitHub (kept on the TV), or the last good copy. */
+    private String loadSup() {
+        File cache = new File(getFilesDir(), "aroflo-supplier-items.js");
+        try {
+            String src = fresh("ec-userscripts", "src/aroflo-supplier-items.js", SUP_URL);
+            if (src.contains("==UserScript==")) {
+                FileWriter w = new FileWriter(cache, false);
+                w.write(src);
+                w.close();
+                return src;
+            }
+        } catch (Exception ignored) {
+        }
+        try {
+            if (cache.exists()) return read(new java.io.FileInputStream(cache));
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
 
     /** Newest Inbox Pull from GitHub (kept on the TV), or the last good copy. */
     private String loadScript() {

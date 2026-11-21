@@ -187,6 +187,12 @@ Ethan wants everything doable from a chat with the PC off, using the TV as the c
 - `web.steps {steps:[{do:'press',ref:4},{do:'fill',fields:[...]},{do:'wait',text:'Saved'}]}` runs several actions in one
   request (look, press, fill, key, scroll, wait, sleep, shot), carrying on after a page change, stopping at the first
   failure with a look. Use it whenever the next few steps are known, it saves a round trip each.
+- Quote pricing (22/11, build 93 on): `web.sup {fn, args}` or `{calls:[...]}` on an open AroFlo quote tab runs the AroFlo
+  supplier items script's bridge (ec-userscripts src, 0.41 on: ping, search, candidates, choose, apply, lines, setValue).
+  The TV puts the script on the quote page inside gm-shim; its CNW and Tradezone requests go through the app with the
+  web tabs' own cookies and browser name (`supplierCookies`), so they're not slowed by the screen being off, and its waits
+  use `window.__ecSleep` (lib). Signed out of a supplier: web.open its page so web.js signs in, then try again. The
+  script never saves: Save Quote with web.run after. Tradezone still needs its bot check ticked once by Ethan.
 - `RunnerActivity` runs api jobs (kind api) on its PC-size hidden page, full screen while they run, then back to how
   the TV was. With more jobs queued it stays open for them.
 - Verified 21/11 on build 63: tv.ping in ~10 s, aroflo.search "Four Mile" 21 s (signed itself in), aroflo.task 9530
