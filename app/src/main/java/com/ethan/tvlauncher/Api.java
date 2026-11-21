@@ -190,7 +190,13 @@ final class Api {
             }
         }
         final String text = answer(id, result);
-        final String file = !ok ? log : result.toString().length() > 3500 ? result.toString(1) : null;
+        String pretty;
+        try {
+            pretty = result.toString(1);
+        } catch (Exception e) {
+            pretty = result.toString();
+        }
+        final String file = !ok ? log : result.toString().length() > 3500 ? pretty : null;
         final String name = file == null ? null : "api-" + id + (ok ? ".json" : "-log.txt");
         post(c, file == null ? text : "api " + id + (ok ? " ok, result attached" : " err " + result.optString("err") + " (log attached)"), file, name);
         kick(c);
