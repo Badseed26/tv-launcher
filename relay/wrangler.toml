@@ -1,4 +1,5 @@
 # EC TV relay (22/11): Claude's MCP connector on one side, the TV's long poll on the other.
+# Deployed first 22/11.
 # Deployed by .github/workflows/relay.yml. Secrets (never in this public repo): OWNER_PASSWORD, set by the workflow.
 name = "ec-tv-relay"
 main = "src/index.js"
