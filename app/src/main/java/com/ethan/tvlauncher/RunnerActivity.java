@@ -1436,6 +1436,21 @@ public class RunnerActivity extends Activity {
             });
         }
 
+        /**
+         * A wait timed by the app (22/11). With the TV screen off the page counts as hidden and its own timers get
+         * throttled to a crawl (an 0.8 s wait took 21 s), so job code waits through here instead.
+         */
+        @JavascriptInterface
+        public void wake(String t, final String id, int ms) {
+            if (!ok(t) || id == null) return;
+            handler.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    if (web != null) web.evaluateJavascript("window.__ecWake&&window.__ecWake(" + JSONObject.quote(id) + ")", null);
+                }
+            }, Math.max(0, Math.min(ms, 120000)));
+        }
+
         /** A supplier or Ambrose sign in page: the TV fills the saved login itself, the job code never sees it. */
         @JavascriptInterface
         public String siteLogin(String t, final String name) {

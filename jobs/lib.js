@@ -56,7 +56,19 @@ window.ec = (function () {
     return new File([blob], String(file.name).replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' });
   };
   ec.b64 = function (blob) { return new Promise(function (res, rej) { var r = new FileReader(); r.onload = function () { res(String(r.result).split(',')[1]); }; r.onerror = rej; r.readAsDataURL(blob); }); };
-  ec.sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+  // Waits are timed by the app when it can (build 92 on): with the TV screen off the page's own timers crawl
+  var wakes = {}, wn = 0;
+  window.__ecWake = function (id) { var f = wakes[id]; if (f) { delete wakes[id]; f(); } };
+  ec.sleep = function (ms) {
+    return new Promise(function (r) {
+      if (api && api.wake) {
+        var id = 'w' + (++wn);
+        wakes[id] = r;
+        try { api.wake(TOKEN, id, Math.round(ms) || 0); return; } catch (e) { delete wakes[id]; }
+      }
+      setTimeout(r, ms);
+    });
+  };
   ec.waitFor = async function (fn, ms, every) {
     var t0 = Date.now(); ms = ms || 10000;
     while (Date.now() - t0 < ms) { try { var v = fn(); if (v) return v; } catch (e) {} await ec.sleep(every || 250); }
