@@ -238,6 +238,13 @@ public class RunnerActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        // An api job still going when the Runner closes gets answered now, so the queue never sits on a dead job (22/11)
+        if (job != null && "api".equals(job.kind)) {
+            try {
+                apiDone(Api.err("the Runner closed part way through, send it again").toString());
+            } catch (Throwable ignored) {
+            }
+        }
         alive = false;
         if (instance == this) instance = null;
         if (job != null) state = "stopped part way (the Runner was closed)";

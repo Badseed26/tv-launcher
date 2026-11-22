@@ -131,7 +131,10 @@ final class Api {
         main.post(new Runnable() {
             @Override
             public void run() {
-                if (running != null) return;
+                if (running != null) {
+                    watchdog(c);
+                    return;
+                }
                 JSONObject next;
                 synchronized (Api.class) {
                     JSONArray q = queue(c);
@@ -157,6 +160,49 @@ final class Api {
                 }
             }
         });
+    }
+
+    private static long goneSince, nudgedAt;
+
+    /**
+     * Main thread, every beat while a job's marked running (22/11). The queue must never sit on a dead job, or Claude
+     * has to ask Ethan to press Home. Runner gone for 60 s: answer the job as dropped. Runner still up but the job's
+     * 2 min past its timeout: cancel it like tv.cancel does, and if that doesn't take within another 2 min, drop it.
+     */
+    static void watchdog(Context c) {
+        JSONObject r = running;
+        if (r == null) {
+            goneSince = 0;
+            nudgedAt = 0;
+            return;
+        }
+        long now = System.currentTimeMillis();
+        long st = r.optLong("started", r.optLong("in", now));
+        JSONObject a = r.optJSONObject("args");
+        long max = Math.max(30, Math.min(900, a != null ? a.optInt("timeout", 180) : 180)) * 1000L;
+        if (!RunnerActivity.busy()) {
+            if (goneSince == 0) goneSince = now;
+            if (now - goneSince < 60000) return;
+            drop(c, r, "the Runner closed part way through, the job was dropped, send it again");
+            return;
+        }
+        goneSince = 0;
+        if (now - st < max + 120000) return;
+        if (nudgedAt == 0) {
+            nudgedAt = now;
+            TvLog.line(c, "api: " + r.optString("id") + " stuck past its timeout, cancelling it");
+            RunnerActivity x = RunnerActivity.instance;
+            if (x != null) x.cancelApi();
+            return;
+        }
+        if (now - nudgedAt > 120000) drop(c, r, "stuck past its timeout and wouldn't cancel, the job was dropped");
+    }
+
+    private static void drop(Context c, JSONObject r, String why) {
+        goneSince = 0;
+        nudgedAt = 0;
+        TvLog.line(c, "api: " + r.optString("id") + " " + why);
+        finished(c, r, err(why), "watchdog: " + why + "\n");
     }
 
     private static void take(Context c, String id) {
@@ -501,11 +547,14 @@ final class Api {
                         o.put("cancelled", n);
                     }
                     if (running != null && (id.equals(running.optString("id")) || "all".equals(id))) {
+                        final JSONObject stuck = running;
                         main.post(new Runnable() {
                             @Override
                             public void run() {
                                 RunnerActivity r = RunnerActivity.instance;
-                                if (r != null) r.cancelApi();
+                                if (r != null && RunnerActivity.busy()) r.cancelApi();
+                                // nothing on the Runner to cancel (it closed part way): drop it here (22/11)
+                                else if (running == stuck) drop(c, stuck, "cancelled");
                             }
                         });
                         o.put("stopping", running.optString("id"));
