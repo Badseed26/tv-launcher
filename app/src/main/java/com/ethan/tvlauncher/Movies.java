@@ -431,6 +431,11 @@ final class Movies {
         final List<Intent> tries = new ArrayList<>();
         final List<String> how = new ArrayList<>();
         String tv = w.optString("tvLink"), url = w.optString("url");
+        // JustWatch's TV links for Disney+ and Prime start the movie playing (22/11): turn them into the title page,
+        // and drop any other play link so the web link (a title page) goes instead
+        tv = tv.replace("disneyplus.com/play/", "disneyplus.com/browse/entity-").replace("primevideo.com/watch?", "primevideo.com/detail?")
+                .replace("netflix.com/watch/", "netflix.com/title/").replace("&time=0", "");
+        if (Pattern.compile("/(play|watch)\\b").matcher(tv).find()) tv = "";
         if (!tv.isEmpty()) {
             try {
                 Intent i = tv.startsWith("intent:") ? Intent.parseUri(tv, Intent.URI_INTENT_SCHEME) : new Intent(Intent.ACTION_VIEW, Uri.parse(tv));

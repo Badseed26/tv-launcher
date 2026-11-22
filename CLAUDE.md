@@ -283,8 +283,11 @@ Ethan asks a chat "find <movie>" and Claude uses `tv_movie` (relay) or `tv_job` 
   turns on FLAG_INCLUDE_NOT_IMPORTANT_VIEWS at start (runtime, not the XML) so tiles show up.
   Not yet tested: whether Netflix's TV app shows its tiles to accessibility at all (some apps draw their own UI).
 - The TV's streaming apps are in `Movies.KNOWN` (same packages as the home screen tiles); others match by app name.
-- Not yet tested on the TV (22/11 it was on Live TV): whether JustWatch takes ANDROID_TV deep links, and which apps land
-  on the title page from a web link vs just opening. Check each app the first time and note it here.
+- Verified 22/11 on build 97: JustWatch answers in under a second and does give ANDROID_TV links (intent:// ones), but
+  Disney+ (`/play/<id>`) and Prime (`/watch?gti=...&time=0`) ones start the movie. Build 98 on turns those into title
+  pages (`/browse/entity-<id>`, `/detail?gti=`) and drops any other play link. Apple TV's is a title page already.
+  JustWatch's "Apple TV" subscription means Apple TV+, not just the app. Prime Video is on the TV but not in his list.
+- Not yet tested: which apps land on the title page from each link, and the profile pick. Note each app here once seen.
 
 ## AroFlo session limit
 AroFlo caps how many devices can be signed in as one user. When Ethan signs in elsewhere, the TV gets the User
