@@ -327,7 +327,22 @@ Ethan asks a chat "find <movie>" and Claude uses `tv_movie` (relay) or `tv_job` 
     while a streaming app's menus are up and a phone or tv_screen is asking.
   - Claude's Enter on a screen the helper can't read (YouTube) can't be checked against the block list, the answer says
     `blind`. The playing back out still applies. tv_stream's description tells Claude to look at tv_screen first.
-- Not yet tested: the other apps' links and pickers, a real PIN pad, and the whole Shell helper on the TV itself.
+  - Verified 22/11 on build 102: Ethan ticked the box, the helper came up as uid 2000 (shell), read the display
+    (1920x1080), mirrored at 960x540 and sent 148 frames to the phone page. (The helper prints two MediaTek lines as it
+    starts, "Init wrapper sys mutex" and "open mma dev failed": harmless.)
+  - Playing, take two (build 103 on). YouTube's home screen plays a sponsored ad with sound and its screen can't be
+    read, so the old guess (sound on, under 4 labels) called it a movie: Claude was locked out and Ethan's picture went.
+    Now the helper splits each frame into a 12 by 8 grid and says how much moved and how much is black (`S` stats).
+    Nearly all of it moving for 5 frames running is a full screen video: the helper holds frames back itself (from the
+    second fast frame, so one frame at most gets out) until it calms down. `Stream.playing`: a seek bar is playing, 4 or
+    more labels isn't, no sound isn't, and otherwise `Shell.video()` decides (full screen video, or 85% black with
+    sound, which is a protected movie in the mirror). A menu with an ad or trailer in part of it isn't playing.
+    Known soft spots: a video that's mostly a still picture reads as a menu, and a protected movie with its controls up
+    can too. tv.shell shows the live numbers (`screen`).
+  - A blind OK from Claude waits 6 s before the playing check (a video takes a few seconds to start).
+  - movie.open with `app` when JustWatch has nothing (Iron Lung, YouTube only): opens that app (YouTube with its
+    search link for the title, untested whether the TV app follows it) for Claude to find it with tv_screen and tv_stream.
+- Not yet tested: the other apps' links and pickers, a real PIN pad, real keys in YouTube and Netflix.
   Note each app here once seen.
 
 ## AroFlo session limit

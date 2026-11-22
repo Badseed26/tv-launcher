@@ -515,7 +515,7 @@ final class RemoteServer {
         if (sp != null && hs != null) {
             String n = Screen.appName(c, sp);
             if (Stream.playingNow(c)) {
-                Shell.videoOff();
+                Shell.dropFrame();
                 send(out, 409, "text/plain", ("On the TV: " + n + " (playing, no picture while a movie's on)").getBytes(StandardCharsets.UTF_8), null);
                 return;
             }

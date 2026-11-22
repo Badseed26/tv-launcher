@@ -211,7 +211,22 @@ final class Movies {
         String type = a.optString("type").toUpperCase(Locale.US); // MOVIE or SHOW
 
         JSONArray nodes = search(q);
-        if (nodes.length() == 0) return Api.err("JustWatch has nothing called " + q + " in Australia");
+        if (nodes.length() == 0) {
+            // not on JustWatch (Iron Lung on YouTube, 22/11): with an app named, open that app to find it there
+            String app = a.optString("app");
+            Map<String, String> all = installed(c);
+            String pkg = app.isEmpty() ? null : appFor(all, app);
+            if (!open || pkg == null) return Api.err("JustWatch has nothing called " + q + " in Australia"
+                    + (open && !app.isEmpty() ? ", and " + app + " isn't on the TV" : ". If you know which app has it, open with app set to it"));
+            JSONObject w = new JSONObject().put("pkg", pkg).put("tvApp", all.get(pkg)).put("app", app);
+            if (pkg.equals("com.google.android.youtube.tv")) w.put("url", "https://www.youtube.com/results?search_query=" + java.net.URLEncoder.encode(q, "UTF-8"));
+            JSONObject o = new JSONObject();
+            o.put("ok", true);
+            o.put("title", q);
+            o.put("note", "JustWatch doesn't list it in Australia, so this only opened " + all.get(pkg) + ": find it there with tv_screen and tv_stream (the app's search, arrows, enter)");
+            o.put("opened", launch(c, w, a.optString("profile"), o));
+            return o;
+        }
 
         // best match: same title, then same year, then type, then JustWatch's own order
         int best = 0, bestScore = -1;

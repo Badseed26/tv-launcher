@@ -36,7 +36,11 @@ import java.nio.charset.StandardCharsets;
  * opened, and stops when that socket closes.
  *
  * From the app, one line each:  key <code> | tap <fx> <fy> | text <base64> | video <width> <fps> <quality> | video 0
- * To the app, [type byte][length][bytes]:  T token (first), F a JPEG frame, L a log line.
+ * To the app, [type byte][length][bytes]:  T token (first), F a JPEG frame, L a log line, S the screen's stats
+ * ("changing black video age": percent of the screen that moved since the last frame, percent that's black, 1 when
+ * it's a full screen of moving video, ms since the mirror started).
+ * Full screen video never leaves here: while nearly the whole screen keeps moving, frames aren't sent (22/11, Ethan's
+ * rule is no video playback; a menu with an ad or preview playing in part of it still shows).
  */
 public final class ShellMain {
 
@@ -156,6 +160,25 @@ public final class ShellMain {
     private static boolean pending;
     private static Bitmap bmp;
     private static ByteBuffer rows;
+    // the screen as a 12 by 8 grid, to tell a full screen video from a menu
+    private static final int GX = 12, GY = 8;
+    private static int[] grid;
+    private static int hot, cool, lastBlack;
+    private static boolean video, held;
+    private static long since;
+    private static final Runnable still = new Runnable() {
+        @Override
+        public void run() {
+            // nothing's moved for a moment: it's a still screen. If frames were being held back, send the one we have.
+            if (reader == null) return;
+            hot = 0;
+            video = false;
+            stat(0);
+            if (held) jpeg();
+            held = false;
+            handler.postDelayed(this, 500);
+        }
+    };
 
     private static void readDisplay() {
         try {
@@ -183,6 +206,10 @@ public final class ShellMain {
             }
             vidW = w;
             vidH = Math.round(w * (float) dispH / dispW) & ~1;
+            grid = null;
+            hot = cool = 0;
+            video = held = false;
+            since = SystemClock.uptimeMillis();
             reader = ImageReader.newInstance(vidW, vidH, PixelFormat.RGBA_8888, 3);
             reader.setOnImageAvailableListener(new ImageReader.OnImageAvailableListener() {
                 @Override
@@ -228,6 +255,7 @@ public final class ShellMain {
             display = null;
             log("video off");
         }
+        if (handler != null) handler.removeCallbacks(still);
         if (reader != null) {
             try {
                 reader.close();
@@ -251,6 +279,39 @@ public final class ShellMain {
             Image.Plane pl = img.getPlanes()[0];
             ByteBuffer buf = pl.getBuffer();
             int stride = pl.getRowStride();
+            // how much of the screen moved since the last frame, and how much is black (16 spots in each grid square)
+            int[] cur = new int[GX * GY];
+            int changed = 0, black = 0;
+            for (int cy = 0; cy < GY; cy++) {
+                for (int cx = 0; cx < GX; cx++) {
+                    int sum = 0, top = 0;
+                    for (int sy = 0; sy < 4; sy++) {
+                        int y = Math.min(h - 1, (int) ((cy + (sy + 0.5f) / 4f) * h / GY));
+                        for (int sx = 0; sx < 4; sx++) {
+                            int x = Math.min(w - 1, (int) ((cx + (sx + 0.5f) / 4f) * w / GX));
+                            int i = y * stride + x * 4;
+                            int pr = buf.get(i) & 0xff, pg = buf.get(i + 1) & 0xff, pb = buf.get(i + 2) & 0xff;
+                            sum += pr + pg + pb;
+                            top = Math.max(top, Math.max(pr, Math.max(pg, pb)));
+                        }
+                    }
+                    int k = cy * GX + cx;
+                    cur[k] = sum;
+                    if (top < 28) black++;
+                    if (grid != null && Math.abs(sum - grid[k]) > 24) changed++;
+                }
+            }
+            grid = cur;
+            int moving = changed * 100 / (GX * GY);
+            lastBlack = black * 100 / (GX * GY);
+            hot = moving >= 80 ? hot + 1 : 0;
+            cool = moving < 50 ? cool + 1 : 0;
+            // most of the screen moving for 5 frames running is a video (a menu sliding across is over in 2 or 3)
+            if (!video && hot >= 5) video = true;
+            else if (video && cool >= 2) video = false;
+            stat(moving);
+            handler.removeCallbacks(still);
+            handler.postDelayed(still, 400);
             if (bmp == null || bmp.getWidth() != w || bmp.getHeight() != h) bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
             if (stride == w * 4) {
                 buf.rewind();
@@ -268,13 +329,31 @@ public final class ShellMain {
                 rows.rewind();
                 bmp.copyPixelsFromBuffer(rows);
             }
+            // held back from the second fast frame on, so at most one frame of a video starting ever goes out
+            held = video || hot >= 2;
+            if (!held) jpeg();
+        } catch (Throwable e) {
+            log("frame failed: " + e);
+        } finally {
+            if (img != null) img.close();
+        }
+    }
+
+    private static void jpeg() {
+        try {
+            if (bmp == null) return;
             ByteArrayOutputStream jpg = new ByteArrayOutputStream(1 << 16);
             bmp.compress(Bitmap.CompressFormat.JPEG, quality, jpg);
             send('F', jpg.toByteArray());
         } catch (Throwable e) {
             log("frame failed: " + e);
-        } finally {
-            if (img != null) img.close();
+        }
+    }
+
+    private static void stat(int moving) {
+        try {
+            send('S', (moving + " " + lastBlack + " " + (video ? 1 : 0) + " " + (SystemClock.uptimeMillis() - since)).getBytes(StandardCharsets.UTF_8));
+        } catch (Throwable ignored) {
         }
     }
 

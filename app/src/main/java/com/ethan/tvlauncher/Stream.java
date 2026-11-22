@@ -202,7 +202,8 @@ final class Stream {
     private static JSONObject after(Context c, HomeButtonService h, JSONObject o) throws Exception {
         // Ethan's own press off the phone page: he's watching the live picture, no need to wait or read the screen back
         if (o.optBoolean("owner") && Shell.up()) return o;
-        Thread.sleep(o.optBoolean("owner") ? 1200 : 2500);
+        // a blind OK (a screen that can't be read) gets longer: a video it started takes a few seconds to get going
+        Thread.sleep(o.optBoolean("owner") ? 1200 : o.has("blind") ? 6000 : 2500);
         AccessibilityNodeInfo root = h.getRootInActiveWindow();
         if (!o.optBoolean("owner") && root != null && playing(c, root)) {
             h.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK);
@@ -423,7 +424,13 @@ final class Stream {
         return pkg != null && !pkg.isEmpty() && Movies.isStreaming(c, pkg);
     }
 
-    /** A movie's actually playing: a seek bar on screen, or sound going with next to nothing on screen. */
+    /**
+     * A movie's actually playing. A seek bar on screen says so. A screen with real menus on it (4 or more labels) isn't.
+     * Sound with next to nothing readable used to count as playing, but YouTube's home screen plays an ad with sound
+     * and its screen can't be read, which locked everything on a menu (22/11). So then the Shell helper's mirror
+     * decides: a full screen of moving video, or of black (a protected movie), is playing. A menu with an ad in part of
+     * it isn't. Without the helper it's the old guess.
+     */
     static boolean playing(Context c, AccessibilityNodeInfo root) {
         if (root == null) return false;
         int texts = 0;
@@ -433,7 +440,12 @@ final class Stream {
             if (!label(n).isEmpty()) texts++;
         }
         AudioManager am = (AudioManager) c.getSystemService(Context.AUDIO_SERVICE);
-        return am != null && am.isMusicActive() && texts < 4;
+        if (texts >= 4 || am == null || !am.isMusicActive()) return false;
+        if (Shell.ready(c, 4000)) {
+            int v = Shell.video();
+            if (v >= 0) return v == 1;
+        }
+        return true;
     }
 
     private static String blocked(String label) {

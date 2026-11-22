@@ -45,6 +45,10 @@ final class Shell {
     private static final Object frameLock = new Object();
     private static byte[] frame;
     private static long seq, lastVideo;
+    // the helper's read of the screen: percent moving, percent black, a full screen video or not, ms the mirror's been on
+    private static int statMoving, statBlack, statAge;
+    private static boolean statVideo;
+    private static long statAt;
     private static volatile long used;
     private static volatile boolean videoOn;
 
@@ -154,6 +158,15 @@ final class Shell {
                             seq++;
                             frameLock.notifyAll();
                         }
+                    }
+                } else if (type == 'S') {
+                    String[] v = new String(b, StandardCharsets.UTF_8).split(" ");
+                    synchronized (frameLock) {
+                        statMoving = Integer.parseInt(v[0]);
+                        statBlack = Integer.parseInt(v[1]);
+                        statVideo = "1".equals(v[2]);
+                        statAge = (int) Math.min(Integer.MAX_VALUE, Long.parseLong(v[3]));
+                        statAt = System.currentTimeMillis();
                     }
                 } else if (type == 'L') note(new String(b, StandardCharsets.UTF_8));
             }
@@ -313,16 +326,7 @@ final class Shell {
         long now = System.currentTimeMillis();
         synchronized (frameLock) {
             videoOn = true;
-            used = now;
-            if (now - lastVideo > 3000) {
-                // nobody's watched for a bit, the helper may have stopped mirroring: start fresh so the frame's a new one
-                frame = null;
-                send("video 0");
-            }
-            if (now - lastVideo > 1000) {
-                lastVideo = now;
-                send("video 960 8 55");
-            }
+            mirror();
             if (after > seq) after = 0; // the phone's count is from before the app restarted
             long until = now + waitMs;
             while ((frame == null || seq <= after) && up()) {
@@ -339,6 +343,51 @@ final class Shell {
             f.jpg = frame;
             f.seq = seq;
             return f;
+        }
+    }
+
+    /** Call with frameLock held. Keeps the helper mirroring (it stops 5 s after the last ask). */
+    private static void mirror() {
+        long now = System.currentTimeMillis();
+        used = now;
+        if (now - lastVideo > 3000) {
+            // nobody's asked for a bit, the helper may have stopped mirroring: start fresh so what comes back is new
+            frame = null;
+            statAt = 0;
+            send("video 0");
+        }
+        if (now - lastVideo > 1000) {
+            lastVideo = now;
+            send("video 960 8 55");
+        }
+    }
+
+    /**
+     * Is the screen a full screen video right now? 1 yes (nearly all of it's moving, or nearly all of it's black, which
+     * is what a protected movie looks like to the mirror), 0 no (a menu, even with an ad or preview playing in part of
+     * it), -1 can't tell. Only worth asking when sound's playing. Takes a second or so the first time (the mirror
+     * has to watch for a moment).
+     */
+    static int video() {
+        long until = System.currentTimeMillis() + 3500;
+        while (up() && System.currentTimeMillis() < until) {
+            synchronized (frameLock) {
+                mirror();
+                if (System.currentTimeMillis() - statAt < 1500 && (statVideo || statAge >= 1200)) return statVideo || statBlack >= 85 ? 1 : 0;
+            }
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                break;
+            }
+        }
+        return -1;
+    }
+
+    /** A movie's playing: the last menu picture's no good any more. The mirror stays on to see when it stops. */
+    static void dropFrame() {
+        synchronized (frameLock) {
+            frame = null;
         }
     }
 
@@ -387,6 +436,8 @@ final class Shell {
         synchronized (frameLock) {
             o.put("video", videoOn);
             o.put("frames", seq);
+            if (System.currentTimeMillis() - statAt < 3000)
+                o.put("screen", "moving " + statMoving + "%, black " + statBlack + "%" + (statVideo ? ", full screen video" : ""));
         }
         JSONArray l = new JSONArray();
         synchronized (log) {
