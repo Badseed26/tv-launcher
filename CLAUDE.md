@@ -45,7 +45,7 @@ This repo is **public**: never put logins, PINs, tokens, IP addresses or the bus
    while it's being used and hides again 2 min after.
    From 20/11 the picture is whatever the TV app has on screen at all times (home, all apps, Filer, Runner, and any
    screen we add later, as long as it calls `Screen.on/off` in onResume/onPause). Any other app or HDMI only gets its
-   name in a text box, never a picture: HomeButtonService notes the front app's package name (nothing else) for that.
+   name in a text box (streaming apps get the streaming panel, see Movie finder), never a picture: HomeButtonService notes the front app's package name (nothing else) for that.
    Taps, Back, Enter and scroll work on any of our screens (`Screen.tap/key`; a Filer page still gets the Filer's
    own tap). The page reloads itself when the TV's build changes, so an old copy never runs against a new build.
 3. **ADB** from AirHQ: `am broadcast` to SecretsReceiver (saves logins into the Keystore) and CodeReceiver (log,
@@ -291,7 +291,13 @@ Ethan asks a chat "find <movie>" and Claude uses `tv_movie` (relay) or `tv_job` 
   picker reads fine (tiles say "Access Ethan's profile", each twice; Nat's is "pin protected"), pressing Ethan's landed
   straight on the title page with PLAY focused and nothing playing. Build 99 on matches the "Access X's profile" form,
   stops on a PIN profile, and a look marks blocked things "(won't press)".
-- Not yet tested: the other apps' links and pickers. Note each app here once seen.
+- Phone page streaming panel (22/11, build 100 on, Ethan: "I can't see Disney so how would I key the code"). When a
+  streaming app's in front (`status.stream`), the phone page swaps its key rows for a list of what's on the app's screen
+  (tap a line to press it, the focused one highlighted, refreshed every 2 s), Back, Home, arrows, OK, and a PIN or search
+  box. `/api/stream` (GET look, POST do press|key|type), phone only (not in LINK_OK, refused via the relay). It runs
+  `Stream.run(..., owner=true)`: Ethan's own, so no block list, works while playing, no back out. Typing digits with no
+  text box on screen presses each digit's button (PIN pads), and the answer never echoes a PIN.
+- Not yet tested: the other apps' links and pickers, the panel's arrows (focusSearch) and a real PIN pad. Note each app here once seen.
 
 ## AroFlo session limit
 AroFlo caps how many devices can be signed in as one user. When Ethan signs in elsewhere, the TV gets the User
