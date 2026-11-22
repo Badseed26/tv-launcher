@@ -76,6 +76,10 @@ final class Stream {
                     for (AccessibilityNodeInfo x : nodes(root)) if (deep(x).toLowerCase(Locale.US).equals(t)) hits.add(x);
                     if (hits.isEmpty())
                         for (AccessibilityNodeInfo x : nodes(root)) if (deep(x).toLowerCase(Locale.US).contains(t)) hits.add(x);
+                    // the same label twice is usually a tile and its inside (Disney+ doubles every profile, 22/11)
+                    java.util.Set<String> labels = new java.util.HashSet<>();
+                    for (AccessibilityNodeInfo x : hits) labels.add(deep(x));
+                    if (labels.size() == 1 && hits.size() > 1) hits = hits.subList(0, 1);
                     if (hits.size() != 1) return look(c, root, o.put("ok", false).put("err", hits.isEmpty() ? "nothing says " + a.optString("text") : hits.size() + " things say " + a.optString("text") + ", use a ref"));
                     n = hits.get(0);
                 }
@@ -170,7 +174,7 @@ final class Stream {
             all.append(t.toLowerCase(Locale.US)).append('\n');
             if (lines.length() < 90) {
                 String flags = (n.isFocused() || n.isAccessibilityFocused() ? " (focused)" : "") + (n.isSelected() ? " (selected)" : "")
-                        + (n.isEditable() ? " (text box)" : "") + (blocked(t) != null ? " (Ethan's)" : "");
+                        + (n.isEditable() ? " (text box)" : "") + (blocked(t) != null ? " (won't press)" : "");
                 lines.put(l.size() + ": " + (t.isEmpty() ? "[no label]" : t) + flags);
             }
         }
@@ -216,13 +220,22 @@ final class Stream {
                     return;
                 }
                 AccessibilityNodeInfo hit = null;
+                boolean pinned = false;
                 for (AccessibilityNodeInfo n : all) {
                     String t = norm(deep(n).toLowerCase(Locale.US));
-                    String w = norm(want.toLowerCase(Locale.US));
-                    if (t.equals(w) || t.startsWith(w + ",") || t.startsWith(w + " profile") || t.startsWith(w + " ")) {
+                    if (isProfile(t, want)) {
+                        // a PIN locked profile is Ethan's to open (Disney+ says "Access Nat's pin protected profile")
+                        if (t.contains("pin")) {
+                            pinned = true;
+                            continue;
+                        }
                         hit = n;
                         break;
                     }
+                }
+                if (hit == null && pinned) {
+                    o.put("profilePicker", want + "'s profile has a PIN, so it stopped on the picker: that one's Ethan's to open");
+                    return;
                 }
                 if (hit == null) {
                     o.put("profilePicker", "it's on the profile picker and there's no " + want + " on it, so it stopped: ask Ethan who to watch as"
@@ -242,6 +255,14 @@ final class Stream {
             }
         } catch (Exception ignored) {
         }
+    }
+
+    /** "Ethan", "Ethan, profile 1", "Access Ethan's profile" (Disney+, 22/11), "Ethan's profile". */
+    private static boolean isProfile(String t, String want) {
+        String w = norm(want.toLowerCase(Locale.US)).trim();
+        if (w.isEmpty()) return false;
+        if (t.equals(w) || t.startsWith(w + ",") || t.startsWith(w + " profile")) return true;
+        return Pattern.compile("(^|\\W)" + Pattern.quote(w) + "'s (pin protected )?profile\\b").matcher(t).find();
     }
 
     private static String profileFor(Context c, String appName) {

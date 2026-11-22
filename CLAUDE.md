@@ -287,7 +287,11 @@ Ethan asks a chat "find <movie>" and Claude uses `tv_movie` (relay) or `tv_job` 
   Disney+ (`/play/<id>`) and Prime (`/watch?gti=...&time=0`) ones start the movie. Build 98 on turns those into title
   pages (`/browse/entity-<id>`, `/detail?gti=`) and drops any other play link. Apple TV's is a title page already.
   JustWatch's "Apple TV" subscription means Apple TV+, not just the app. Prime Video is on the TV but not in his list.
-- Not yet tested: which apps land on the title page from each link, and the profile pick. Note each app here once seen.
+- Disney+ verified 22/11 on build 98 (The Martian): the rewritten TV link opened Disney+ on "Who's watching?", the
+  picker reads fine (tiles say "Access Ethan's profile", each twice; Nat's is "pin protected"), pressing Ethan's landed
+  straight on the title page with PLAY focused and nothing playing. Build 99 on matches the "Access X's profile" form,
+  stops on a PIN profile, and a look marks blocked things "(won't press)".
+- Not yet tested: the other apps' links and pickers. Note each app here once seen.
 
 ## AroFlo session limit
 AroFlo caps how many devices can be signed in as one user. When Ethan signs in elsewhere, the TV gets the User
