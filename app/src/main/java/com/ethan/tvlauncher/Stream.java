@@ -58,8 +58,10 @@ final class Stream {
         if (h == null) return Api.err("the accessibility helper isn't running on the TV");
         PowerManager pm = (PowerManager) c.getSystemService(Context.POWER_SERVICE);
         if (pm != null && !pm.isInteractive()) return Api.err("the TV's off");
-        AccessibilityNodeInfo root = h.getRootInActiveWindow();
+        AccessibilityNodeInfo root = root(h);
         String pkg = root == null || root.getPackageName() == null ? "" : root.getPackageName().toString();
+        // our own screen's up (home, Filer...): whatever the helper last saw of another app is old news (22/11)
+        if (Screen.top != null) pkg = "";
         if (!streaming(c, pkg)) return Api.err("there's no streaming app on the TV (it's on " + Screen.name(c) + "), open a movie first");
         boolean playingNow = playing(c, root);
         if (playingNow && !owner) return Api.err("a movie's playing on " + Screen.appName(c, pkg) + ", so hands off (Ethan's rule)");
@@ -95,8 +97,10 @@ final class Stream {
                 }
                 String why = owner ? null : blocked(deep(n));
                 if (why != null) return look(c, root, o.put("ok", false).put("err", "won't press " + why + " (starts the movie or costs money, that's Ethan's)"));
+                // nothing readable on it (YouTube, Netflix): pressing it does nothing or something unknown
+                if (!owner && deep(n).isEmpty()) return look(c, root, o.put("ok", false).put("err", "there's nothing readable on that one, use tv_screen and the arrow keys"));
                 o.put("pressed", deep(n));
-                if (!click(n) && !(Shell.ready(c, 4000) && tapNode(c, n))) o.put("note", "the app didn't take the press, move to it with the arrows then enter");
+                if (!pressNode(c, n)) o.put("note", "the app didn't take the press, move to it with the arrows then enter");
                 return after(c, h, o);
             }
             case "movie.key": {
@@ -104,7 +108,7 @@ final class Stream {
                 if (k.equals("ok")) k = "enter";
                 // real remote keys through the Shell helper when it's up (22/11): YouTube and Netflix ignore the
                 // accessibility presses, and Disney+ only opened its lower rows for a real Down
-                if (k.matches("back|home|enter|up|down|left|right") && Shell.ready(c, 4000)) {
+                if (k.matches("back|home|enter|up|down|left|right") && Shell.ready(c, 8000)) {
                     if (k.equals("enter") && !owner) {
                         AccessibilityNodeInfo f = focused(root);
                         String label = f == null ? "" : deep(f);
@@ -176,7 +180,7 @@ final class Stream {
                     }
                     for (char ch : t.toCharArray()) {
                         AccessibilityNodeInfo key = null;
-                        for (AccessibilityNodeInfo x : nodes(h.getRootInActiveWindow()))
+                        for (AccessibilityNodeInfo x : nodes(root(h)))
                             if (deep(x).equals(String.valueOf(ch))) { key = x; break; }
                         if (key == null) return after(c, h, o.put("ok", false).put("err", "no box and no " + ch + " button on screen"));
                         click(key);
@@ -204,12 +208,12 @@ final class Stream {
         if (o.optBoolean("owner") && Shell.up()) return o;
         // a blind OK (a screen that can't be read) gets longer: a video it started takes a few seconds to get going
         Thread.sleep(o.optBoolean("owner") ? 1200 : o.has("blind") ? 6000 : 2500);
-        AccessibilityNodeInfo root = h.getRootInActiveWindow();
+        AccessibilityNodeInfo root = root(h);
         if (!o.optBoolean("owner") && root != null && playing(c, root)) {
             h.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK);
             o.put("backedOut", "that started the movie playing, so it pressed Back (playing is Ethan's)");
             Thread.sleep(2000);
-            root = h.getRootInActiveWindow();
+            root = root(h);
         }
         String pkg = root == null || root.getPackageName() == null ? "" : root.getPackageName().toString();
         if (root == null || !streaming(c, pkg)) {
@@ -246,6 +250,8 @@ final class Stream {
         }
         refs = l;
         o.put("screen", lines);
+        // an app that draws its own screen (YouTube, Netflix): nothing to read or press by name
+        if (all.toString().trim().isEmpty()) o.put("blind", "this app's screen can't be read: look with tv_screen and move with the arrow keys and enter (real remote keys), don't press by ref or text");
         if (PROFILE_SCREEN.matcher(norm(all.toString())).find()) o.put("profilePicker", true);
         return o;
     }
@@ -262,7 +268,7 @@ final class Stream {
         try {
             while (System.currentTimeMillis() < until) {
                 Thread.sleep(1000);
-                AccessibilityNodeInfo root = h.getRootInActiveWindow();
+                AccessibilityNodeInfo root = root(h);
                 if (root == null || root.getPackageName() == null || !pkg.equals(root.getPackageName().toString())) continue;
                 List<AccessibilityNodeInfo> all = nodes(root);
                 StringBuilder text = new StringBuilder();
@@ -308,7 +314,7 @@ final class Stream {
                             + " (then movie.open again with profile, or tv_stream press). On screen: " + names);
                     return;
                 }
-                if (!click(hit)) {
+                if (!pressNode(c, hit)) {
                     o.put("profilePicker", "found " + want + " on the profile picker but the app didn't take the press");
                     return;
                 }
@@ -366,7 +372,7 @@ final class Stream {
         HomeButtonService h = HomeButtonService.instance;
         PowerManager pm = (PowerManager) c.getSystemService(Context.POWER_SERVICE);
         if (h == null || Screen.top != null || (pm != null && !pm.isInteractive())) return null;
-        AccessibilityNodeInfo root = h.getRootInActiveWindow();
+        AccessibilityNodeInfo root = root(h);
         String pkg = root == null || root.getPackageName() == null ? "" : root.getPackageName().toString();
         return streaming(c, pkg) ? pkg : null;
     }
@@ -375,9 +381,45 @@ final class Stream {
         long now = android.os.SystemClock.uptimeMillis();
         if (now - playAt < 700) return playWas;
         HomeButtonService h = HomeButtonService.instance;
-        playWas = h != null && playing(c, h.getRootInActiveWindow());
+        playWas = h != null && playing(c, root(h));
         playAt = android.os.SystemClock.uptimeMillis();
         return playWas;
+    }
+
+    /** The app's window that has the remote's focus. The "active window" can lag an app change (22/11: it said Disney+ on Stan). */
+    static AccessibilityNodeInfo root(HomeButtonService h) {
+        try {
+            for (android.view.accessibility.AccessibilityWindowInfo w : h.getWindows()) {
+                if (w.getType() != android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION || !w.isFocused()) continue;
+                AccessibilityNodeInfo r = w.getRoot();
+                if (r != null) return r;
+            }
+        } catch (Throwable ignored) {
+        }
+        return h.getRootInActiveWindow();
+    }
+
+    /**
+     * Presses a thing: the accessibility press, and if the app won't take it (Stan's profile tiles, 22/11), focus on it
+     * and a real OK, and failing that a real tap in its middle.
+     */
+    private static boolean pressNode(Context c, AccessibilityNodeInfo n) {
+        if (click(n)) return true;
+        if (!Shell.ready(c, 8000)) return false;
+        try {
+            AccessibilityNodeInfo f = n;
+            for (int i = 0; i < 6 && f != null && !f.isFocusable(); i++) f = f.getParent();
+            if (f != null) {
+                if (!f.isFocused()) {
+                    f.performAction(AccessibilityNodeInfo.ACTION_FOCUS);
+                    Thread.sleep(350);
+                    f.refresh();
+                }
+                if (f.isFocused()) return Shell.key("enter");
+            }
+        } catch (Throwable ignored) {
+        }
+        return tapNode(c, n);
     }
 
     /** A real finger tap in the middle of a thing (when the app won't take the accessibility press). */
@@ -395,7 +437,7 @@ final class Stream {
     static boolean tapAt(Context c, float fx, float fy) {
         HomeButtonService h = HomeButtonService.instance;
         if (h == null) return false;
-        AccessibilityNodeInfo root = h.getRootInActiveWindow();
+        AccessibilityNodeInfo root = root(h);
         if (root == null) return false;
         android.util.DisplayMetrics dm = new android.util.DisplayMetrics();
         ((android.view.WindowManager) c.getSystemService(Context.WINDOW_SERVICE)).getDefaultDisplay().getRealMetrics(dm);

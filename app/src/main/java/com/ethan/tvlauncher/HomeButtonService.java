@@ -24,7 +24,9 @@ public class HomeButtonService extends AccessibilityService {
         try {
             android.accessibilityservice.AccessibilityServiceInfo info = getServiceInfo();
             if (info != null) {
-                info.flags |= android.accessibilityservice.AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS;
+                info.flags |= android.accessibilityservice.AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
+                        // and which window has the remote's focus, so the app in front is never a stale guess
+                        | android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS;
                 setServiceInfo(info);
             }
         } catch (Exception ignored) {

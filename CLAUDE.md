@@ -343,8 +343,29 @@ Ethan asks a chat "find <movie>" and Claude uses `tv_movie` (relay) or `tv_job` 
   - A blind OK from Claude waits 6 s before the playing check (a video takes a few seconds to start).
   - movie.open with `app` when JustWatch has nothing (Iron Lung, YouTube only): opens that app (YouTube with its
     search link for the title, untested whether the TV app follows it) for Claude to find it with tv_screen and tv_stream.
-- Not yet tested: the other apps' links and pickers, a real PIN pad, real keys in YouTube and Netflix.
-  Note each app here once seen.
+  - Another chat's session, 22/11 (builds 101 to 103), and what build 105 does about it:
+    - YouTube can't be read at all (a look is 10 things with no label), so a look now says `blind` and Claude's press
+      on a thing with no label is refused. tv_screen plus real keys is the way. Real keys worked in YouTube from 102 on
+      (the 22:51 failures were build 101's focus moves).
+    - The way through YouTube that worked: key up (top bar), right (search), enter, type the title plus " movie", left
+      to the suggestions, down to the right one, enter, enter on the movie's card (it shows a price), which lands on the
+      movie page with Buy or rent focused. Stop there. movie.open's answer gives this as `next`.
+    - YouTube opens on whoever used it last (it went straight to someone else's account the second time) and a rental
+      charges the active account. Nothing can read which, so the answer's `account` tells Claude to check tv_screen and
+      tell Ethan. Its account picker takes arrows and enter.
+    - movie.open with `app` opens that app whenever JustWatch hasn't got the title on it (not only when JustWatch has
+      nothing at all).
+    - The app in front was sometimes stale ("Disney+" on Stan, "YouTube" on our home screen): Stream reads the window
+      that has the remote's focus (`Stream.root`, FLAG_RETRIEVE_INTERACTIVE_WINDOWS) and gives up when one of our own
+      screens is up.
+    - Stan's profile tiles don't take the accessibility press (Paramount+'s do): `pressNode` then focuses the tile and
+      sends a real OK, or taps it. The auto profile pick uses it too.
+    - Paramount+'s JustWatch links for a show go to an episode, which starts playing: `Movies.page` cuts them back to
+      the show's page (.../shows/<slug>/). Stan's /programs/ link already lands on the show page.
+    - JustWatch lists one app several times (Netflix, Netflix Kids, Netflix Standard with Ads): `where` is one line per
+      TV app and kind now.
+- Not yet tested: Paramount+'s show page link, YouTube's search link, Netflix (links, picker, whether it can be read),
+  a real PIN pad. Note each app here once seen.
 
 ## AroFlo session limit
 AroFlo caps how many devices can be signed in as one user. When Ethan signs in elsewhere, the TV gets the User

@@ -215,17 +215,12 @@ final class Movies {
             // not on JustWatch (Iron Lung on YouTube, 22/11): with an app named, open that app to find it there
             String app = a.optString("app");
             Map<String, String> all = installed(c);
-            String pkg = app.isEmpty() ? null : appFor(all, app);
-            if (!open || pkg == null) return Api.err("JustWatch has nothing called " + q + " in Australia"
-                    + (open && !app.isEmpty() ? ", and " + app + " isn't on the TV" : ". If you know which app has it, open with app set to it"));
-            JSONObject w = new JSONObject().put("pkg", pkg).put("tvApp", all.get(pkg)).put("app", app);
-            if (pkg.equals("com.google.android.youtube.tv")) w.put("url", "https://www.youtube.com/results?search_query=" + java.net.URLEncoder.encode(q, "UTF-8"));
+            if (!open || app.isEmpty() || appFor(all, app) == null) return Api.err("JustWatch has nothing called " + q + " in Australia"
+                    + (open && !app.isEmpty() ? ", and " + app + " isn't on the TV" : ". If you know which app has it (new releases to rent are often on YouTube), open with app set to it"));
             JSONObject o = new JSONObject();
             o.put("ok", true);
             o.put("title", q);
-            o.put("note", "JustWatch doesn't list it in Australia, so this only opened " + all.get(pkg) + ": find it there with tv_screen and tv_stream (the app's search, arrows, enter)");
-            o.put("opened", launch(c, w, a.optString("profile"), o));
-            return o;
+            return appOnly(c, a, q, type, all, o);
         }
 
         // best match: same title, then same year, then type, then JustWatch's own order
@@ -275,7 +270,9 @@ final class Movies {
             if (svc.toLowerCase(Locale.US).contains("channel")) continue; // add-on channels inside Prime or Apple, Ethan hasn't got any
             String kind = kind(f.optString("monetizationType"));
             if (kind == null) continue;
-            String id = key(svc) + "|" + kind;
+            String pkg0 = appFor(all, svc);
+            // one line per TV app: "Netflix", "Netflix Kids" and "Netflix Standard with Ads" are all the Netflix app
+            String id = (pkg0 != null ? pkg0 : key(svc)) + "|" + kind;
             JSONObject w = where.get(id);
             double price = f.optDouble("retailPriceValue", 0);
             if (w != null) {
@@ -293,8 +290,8 @@ final class Movies {
             w.put("onTv", pkg != null);
             if (pkg != null) w.put("tvApp", all.get(pkg));
             w.put("loggedIn", pkg != null && (guessing || inList(loggedIn, svc) || inList(loggedIn, all.get(pkg))));
-            w.put("url", f.optString("standardWebURL"));
-            if (!f.optString("tvLink").isEmpty() && !"null".equals(f.optString("tvLink"))) w.put("tvLink", f.optString("tvLink"));
+            w.put("url", page(f.optString("standardWebURL").replace("&amp;", "&")));
+            if (!f.optString("tvLink").isEmpty() && !"null".equals(f.optString("tvLink"))) w.put("tvLink", page(f.optString("tvLink")));
             if (pkg != null) w.put("pkg", pkg);
             where.put(id, w);
         }
@@ -312,8 +309,10 @@ final class Movies {
                 for (JSONObject w : where.values())
                     if (pick == null && k.equals(w.optString("kind")) && (same(key(w.optString("app")), key(force)) || same(key(w.optString("tvApp")), key(force))))
                         pick = w;
-            if (pick == null) why = "JustWatch doesn't list it on " + force;
-            else if (!pick.optBoolean("onTv")) {
+            if (pick == null) {
+                if (open && appFor(all, force) != null) return appOnly(c, a, q, type, all, o);
+                why = "JustWatch doesn't list it on " + force;
+            } else if (!pick.optBoolean("onTv")) {
                 why = pick.optString("app") + " isn't on the TV";
                 pick = null;
             }
@@ -355,6 +354,32 @@ final class Movies {
 
         o.put("opened", launch(c, pick, a.optString("profile"), o));
         return o;
+    }
+
+    /**
+     * JustWatch doesn't have the title on the app Claude named: open the app for Claude to find it there. YouTube gets
+     * its search link for the title (untested whether the TV app follows it), and the way through its screens that
+     * worked on 22/11, because nothing in YouTube can be read.
+     */
+    private static JSONObject appOnly(Context c, JSONObject a, String q, String type, Map<String, String> all, JSONObject o) throws Exception {
+        String pkg = appFor(all, a.optString("app"));
+        JSONObject w = new JSONObject().put("pkg", pkg).put("tvApp", all.get(pkg)).put("app", a.optString("app"));
+        boolean yt = pkg.equals("com.google.android.youtube.tv");
+        String find = q + ("SHOW".equals(type) ? "" : " movie");
+        if (yt) w.put("url", "https://www.youtube.com/results?search_query=" + java.net.URLEncoder.encode(find, "UTF-8"));
+        o.put("plan", "JustWatch doesn't list it on " + all.get(pkg) + ", so open " + all.get(pkg) + " to search for it there");
+        o.put("opened", launch(c, w, a.optString("profile"), o));
+        o.put("next", yt ? "Look at tv_screen. If it's not showing search results for the title: key up (top bar), right (search), enter, type \""
+                + find + "\", then left and down to the matching suggestion and enter. Enter on the movie's card (it shows a price) opens its page. "
+                + "Stop there with Buy or rent focused, never press it."
+                : "Find it with tv_screen and tv_stream: the app's search, arrows, enter.");
+        return o;
+    }
+
+    /** A show's own page, not one of its episodes: Paramount+ links go to an episode, which starts playing (22/11). */
+    private static String page(String link) {
+        return link.replaceAll("(paramountplus\\.com/shows/[^/#?]+)/video/[^#?]*", "$1/")
+                .replaceAll("(paramountplus\\.com%2Fshows%2F[^%#;]+)%2Fvideo%2F[^;#]*", "$1%2F");
     }
 
     private static String kind(String m) {
@@ -561,6 +586,9 @@ final class Movies {
         Thread.sleep(1500);
         o.put("front", Screen.name(c));
         o.put("next", "movie.look shows the app's screen, to check it's on the movie's page");
+        // YouTube's screen can't be read, so nothing here can pick or name the account (22/11)
+        if (pkg.equals("com.google.android.youtube.tv")) o.put("account", "YouTube opens on whoever used it last and the TV can't read which. "
+                + "Check the account on tv_screen and tell Ethan, a rental is charged to the account that's active. On its account picker, move with the arrows and enter.");
         return true;
     }
 }
