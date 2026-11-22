@@ -60,8 +60,9 @@ This repo is **public**: never put logins, PINs, tokens, IP addresses or the bus
   back to the menu, Back goes home, and the menu closes itself after 5 min untouched. Taps and keys from the phone page
   (`Screen.tap/key` mark `Lock.remoteAt`), the Todoist remote and auto runs never ask. The code is `tv code <digits>`
   on the Todoist remote, kept in the app's own storage; until one's set it's the phone page PIN. New work apps go in
-  as tiles on that menu. The phone page also has Wake TV and TV off (22/11, build 104 on: standby through the
-  accessibility helper's lock screen action, the Shell helper's sleep key if that fails; phone only, refused via the relay).
+  as tiles on that menu. The phone page has a TV row: Home (build 106 on, the home screen from any app, Live TV and HDMI too), Wake TV, TV off
+  (build 104 on: standby through the accessibility helper's lock screen action, the Shell helper's sleep key if that
+  fails) and Update TV. Home and TV off are phone only, refused via the relay.
 - `Weather` (21/11): live weather under the home screen's buttons (beside the clock pushed the top row off screen) from Open-Meteo (no key), every 15 min. The
   place is set with `weather <town>` on the Todoist remote (kept in app storage, never in this public repo),
   `weather` shows it, `weather off` hides it. Nothing shows until a place is set.

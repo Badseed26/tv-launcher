@@ -325,8 +325,8 @@ final class RemoteServer {
                 })));
                 return;
             case "/api/cmd":
-                // TV off is Ethan's button, not one of Claude's tools
-                if (viaLink && "off".equals(a.get("c"))) {
+                // TV off and Home (out of whatever he's watching) are Ethan's buttons, not Claude's tools
+                if (viaLink && ("off".equals(a.get("c")) || "home".equals(a.get("c")))) {
                     json(out, ok(false));
                     return;
                 }
@@ -708,6 +708,23 @@ final class RemoteServer {
                 });
                 note = on ? "TV's already on." : "Turning the TV on, give it a few seconds.";
                 break;
+            case "home": { // the Home button (Ethan, 22/11): the TV's home screen from any app, Live TV and HDMI too
+                final HomeButtonService hb = HomeButtonService.instance;
+                if (hb == null && !Shell.up()) {
+                    note = "Couldn't press Home (the TV's helper isn't running).";
+                    break;
+                }
+                main.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        boolean ok = hb != null && hb.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME);
+                        if (!ok) ok = Shell.up() && Shell.key("home");
+                        if (!ok) note = "Couldn't press Home.";
+                    }
+                });
+                note = "";
+                break;
+            }
             case "off": { // the TV off button (Ethan, 22/11): standby, like the power button on the TV's own remote
                 android.os.PowerManager pw = (android.os.PowerManager) c.getSystemService(Context.POWER_SERVICE);
                 if (pw != null && !pw.isInteractive()) {
