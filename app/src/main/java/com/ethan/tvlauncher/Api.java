@@ -68,6 +68,15 @@ final class Api {
         if (!id.matches("[A-Za-z0-9_.-]{1,40}")) return "api: id can only be letters, numbers, dot, dash or underscore";
 
         if (what.startsWith("tv.")) return answer(id, tv(c, what, r.optJSONObject("args")));
+        // movie finder (22/11): straight away on its own thread, not the Runner, so it works while Ethan's on another app
+        if (what.startsWith("movie.")) {
+            try {
+                r.put("started", System.currentTimeMillis());
+            } catch (Exception ignored) {
+            }
+            Movies.request(c, r);
+            return null;
+        }
 
         String key = r.optString("key");
         if (!key.isEmpty()) {
@@ -235,6 +244,16 @@ final class Api {
 
     static void finished(final Context c, JSONObject req, JSONObject result, String log) {
         running = null;
+        report(c, req, result, log);
+        kick(c);
+    }
+
+    /** A request answered off to the side of the queue (movie.*): same answer path, the queue's left alone. */
+    static void side(Context c, JSONObject req, JSONObject result) {
+        report(c, req, result, null);
+    }
+
+    private static void report(final Context c, JSONObject req, JSONObject result, String log) {
         final String id = req.optString("id");
 
         boolean ok = result.optBoolean("ok") && !result.has("err");
@@ -285,7 +304,6 @@ final class Api {
                 }
             }, 1500);
         }
-        kick(c);
     }
 
     /** A job's newest pictures (up to max), one comment each. False if it has none. */

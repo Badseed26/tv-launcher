@@ -7,7 +7,9 @@ This repo is **public**: never put logins, PINs, tokens, IP addresses or the bus
 ## Ground rules
 - Modern clean look (blue and violet glows on dark). Not the orange and warm grey, those are for his work stuff only.
 - No em dashes anywhere (code, comments, commits, notes). Plain, short Aussie English in comments.
-- Remote control is for the Filer only, never Netflix or other apps on the TV.
+- Remote control is for the Filer only, never Netflix or other apps on the TV. One exception (Ethan, 22/11): the movie
+  finder opens a streaming app on a movie's page. It never presses anything inside those apps (no Play, Rent or Buy), never
+  pays, and never reads or pictures their screens.
 - Outlook is read only (never send, move or change read status). Never touch AroFlo admin or settings areas.
 - Commit as `-c user.name="Ethan Callaghan" -c user.email="Badseed26@users.noreply.github.com"`, push with
   `git -c push.negotiate=true push`.
@@ -253,6 +255,24 @@ the TV keeps a long poll open to it (`Link.java`), so a tool call reaches the TV
   AroFlo search (TV in standby) 16 s; tv_status under a second. Updates can be sent with tv_filer update.
 - Build release fix (22/11): `gh release create` sometimes leaves a draft the TV can't see (404 on update). The build
   now finds the release by its name and publishes it by id, checking it took.
+
+## Movie finder (22/11, build 97 on)
+Ethan asks a chat "find <movie>" and Claude uses `tv_movie` (relay) or `tv_job` with `movie.*` (Todoist remote too).
+- `Movies.java`. Answered straight away on its own thread (not the Runner queue), so it works while he's on Live TV or
+  another app. `Api.side` sends the answer the same way a job's goes.
+- `movie.find {q, year, type}`: JustWatch's GraphQL (apis.justwatch.com, AU, no key) for the title, picks the best match
+  (same title, year, type), and lists `where` (app, kind subscription/free/rent/buy, price, onTv, loggedIn) plus
+  `notLoggedIn` (subscriptions it's on that he hasn't got) and `plan` (what open would do). `otherMatches` when unsure.
+- `movie.open` does the same then opens: a subscription or free app he's logged into first, else the cheapest rent on an
+  app he's logged into (his `rent` list first). It never opens a subscription he hasn't got, it just says so. `app` forces one.
+  Wakes the TV if it's off. Tries JustWatch's Android TV deep link (asked for, dropped if JustWatch refuses it), then
+  `netflix://title/<id>` for Netflix, then the offer's web link aimed at the app's package, then just opens the app.
+  The answer's `how` says which took and `front` is the app now on top (package name only, like the phone page).
+- `movie.apps {set:[...], rent:[...]}`: his logged in apps and rent apps, kept in the app's own storage (`movies` prefs).
+  Until `set` is sent every streaming app on the TV counts as logged in (the answer's `note` says so).
+- The TV's streaming apps are in `Movies.KNOWN` (same packages as the home screen tiles); others match by app name.
+- Not yet tested on the TV (22/11 it was on Live TV): whether JustWatch takes ANDROID_TV deep links, and which apps land
+  on the title page from a web link vs just opening. Check each app the first time and note it here.
 
 ## AroFlo session limit
 AroFlo caps how many devices can be signed in as one user. When Ethan signs in elsewhere, the TV gets the User

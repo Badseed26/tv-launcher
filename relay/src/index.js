@@ -40,10 +40,15 @@ const TOOLS = [
     inputSchema: { type: 'object', properties: { c: { type: 'string' } }, required: ['c'] } },
   { name: 'tv_view', description: 'Which Filer page shows on the TV: outlook, aroflo, or empty for the Filer screen.',
     inputSchema: { type: 'object', properties: { s: { type: 'string' } }, required: ['s'] } },
-  { name: 'tv_job', description: 'Run one of the TV\'s api jobs (same as the Todoist remote, see the tv-launcher CLAUDE.md): aroflo.* (search, task, calendar, files, file, run, note.add, note.edit, siteinfo.add, schedule.add, schedule.move), outlook.* (read only: check, search, read, attachment, run), web.* tabs (open, look, text, press, fill, key, scroll, wait, shot, steps, upload, ambrose, run, close) and tv.* (ping, queue, cancel, log, shots, safe, wake). Waits for the answer (up to wait seconds, 100 by default); if it\'s still going, call tv_wait with the id. Pictures from the job come back as images.',
+  { name: 'tv_job', description: 'Run one of the TV\'s api jobs (same as the Todoist remote, see the tv-launcher CLAUDE.md): aroflo.* (search, task, calendar, files, file, run, note.add, note.edit, siteinfo.add, schedule.add, schedule.move), outlook.* (read only: check, search, read, attachment, run), web.* tabs (open, look, text, press, fill, key, scroll, wait, shot, steps, upload, ambrose, run, close), movie.* (find, open, apps: use tv_movie) and tv.* (ping, queue, cancel, log, shots, safe, wake). Waits for the answer (up to wait seconds, 100 by default); if it\'s still going, call tv_wait with the id. Pictures from the job come back as images.',
     inputSchema: { type: 'object', properties: {
       do: { type: 'string' }, args: { type: 'object' }, dry: { type: 'boolean' }, key: { type: 'string', description: 'for writes: the same key twice only runs once' },
       branch: { type: 'string' }, id: { type: 'string' }, wait: { type: 'number' } }, required: ['do'] } },
+  { name: 'tv_movie', description: 'Find a movie or show for Ethan to watch on the TV. Looks it up on JustWatch (what\'s streaming where in Australia), then opens it on a streaming app he\'s logged into, on the movie\'s page ready for him to press Play. If it\'s not on any of his subscriptions but can be rented on one of his apps, it opens the cheapest rent page there (he presses Rent himself, the TV never pays). The answer says where it is (where: app, kind, price, onTv, loggedIn), what it did (plan, opened, how) and which subscriptions it\'s on that he hasn\'t got (notLoggedIn): tell him that plainly. open:false only looks. app picks the app. If otherMatches shows it might be a different title, check with him. apps sets the streaming apps he\'s logged into (a list of names), rent the ones he rents from; apps:[] with nothing else just lists them and the apps on the TV. It can\'t see inside the streaming app, so ask him to say if it stopped on a profile picker.',
+    inputSchema: { type: 'object', properties: {
+      q: { type: 'string', description: 'the movie or show name, year optional' }, year: { type: 'number' }, type: { type: 'string', description: 'movie or show' },
+      app: { type: 'string' }, open: { type: 'boolean', description: 'default true' },
+      apps: { type: 'array', items: { type: 'string' } }, rent: { type: 'array', items: { type: 'string' } } } } },
   { name: 'tv_wait', description: 'Wait more for an api job that tv_job said is still running (by its id).',
     inputSchema: { type: 'object', properties: { id: { type: 'string' }, wait: { type: 'number' } }, required: ['id'] } },
   { name: 'tv_pictures', description: 'The newest pictures an api job took (n, 1 to 6), by its id.',
@@ -270,7 +275,7 @@ export class Hub {
   async rpc(method, params, origin) {
     if (method === 'initialize') return {
       protocolVersion: params.protocolVersion || '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'EC TV', version: '1.0' },
-      instructions: 'Ethan\'s TV as Claude\'s computer (tv-launcher repo, CLAUDE.md has the whole api). Use tv_job for AroFlo, Outlook (read only) and web tabs; tv_screen to see the page. Never send, submit, pay, delete, or touch site safety sign ins: the TV blocks those anyway.' };
+      instructions: 'Ethan\'s TV as Claude\'s computer (tv-launcher repo, CLAUDE.md has the whole api). Use tv_job for AroFlo, Outlook (read only) and web tabs; tv_screen to see the page; tv_movie to find a movie and open it on his streaming apps. Never send, submit, pay, delete, or touch site safety sign ins: the TV blocks those anyway.' };
     if (method === 'ping') return {};
     if (method === 'tools/list') return { tools: TOOLS };
     if (method !== 'tools/call') { const e = new Error('Method not found'); e.code = -32601; throw e; }
@@ -311,6 +316,24 @@ export class Hub {
         if (a.key) req.key = a.key;
         if (a.branch) req.branch = a.branch;
         const r = await this.send('api', { req, wait }, (wait + 25) * 1000);
+        if (!r.id) r.id = req.id;
+        return out(r);
+      }
+      case 'tv_movie': {
+        const req = { id: 'mv' + Date.now().toString(36), args: {} };
+        if (Array.isArray(a.apps) || Array.isArray(a.rent)) {
+          req.do = 'movie.apps';
+          if (Array.isArray(a.apps) && a.apps.length) req.args.set = a.apps;
+          if (Array.isArray(a.rent) && a.rent.length) req.args.rent = a.rent;
+        } else {
+          if (!a.q) throw new Error('tv_movie needs q (the movie name), or apps to set his logged in apps');
+          req.do = a.open === false ? 'movie.find' : 'movie.open';
+          req.args = { q: a.q };
+          if (a.year) req.args.year = a.year;
+          if (a.type) req.args.type = a.type;
+          if (a.app) req.args.app = a.app;
+        }
+        const r = await this.send('api', { req, wait: 60 }, 85000);
         if (!r.id) r.id = req.id;
         return out(r);
       }
