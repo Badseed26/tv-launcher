@@ -7,8 +7,9 @@ import android.os.Looper;
 import android.view.accessibility.AccessibilityEvent;
 
 /**
- * Helper whose only job is to press Home after the launcher updates, so you land
- * back on the home screen instead of the last app. It doesn't read the screen.
+ * Helper that presses Home after the launcher updates, Install during a remote update, and (22/11, movie finder) reads
+ * and presses streaming apps' menus when Claude asks (Stream.java, never while a movie's playing). Other apps: their
+ * package name only.
  */
 public class HomeButtonService extends AccessibilityService {
 
@@ -19,6 +20,15 @@ public class HomeButtonService extends AccessibilityService {
     protected void onServiceConnected() {
         super.onServiceConnected();
         instance = this;
+        // movie finder: see the streaming apps' whole menus (tiles often aren't marked important)
+        try {
+            android.accessibilityservice.AccessibilityServiceInfo info = getServiceInfo();
+            if (info != null) {
+                info.flags |= android.accessibilityservice.AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS;
+                setServiceInfo(info);
+            }
+        } catch (Exception ignored) {
+        }
         if (Updater.consumeGoHome(this)) goHomeSoon();
         // Starts listening to the TV remote task in Todoist (runs whenever the TV's on).
         Remote.start(this);

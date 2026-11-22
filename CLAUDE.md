@@ -7,9 +7,9 @@ This repo is **public**: never put logins, PINs, tokens, IP addresses or the bus
 ## Ground rules
 - Modern clean look (blue and violet glows on dark). Not the orange and warm grey, those are for his work stuff only.
 - No em dashes anywhere (code, comments, commits, notes). Plain, short Aussie English in comments.
-- Remote control is for the Filer only, never Netflix or other apps on the TV. One exception (Ethan, 22/11): the movie
-  finder opens a streaming app on a movie's page. It never presses anything inside those apps (no Play, Rent or Buy), never
-  pays, and never reads or pictures their screens.
+- Remote control is for the Filer only, never Netflix or other apps on the TV. Exception (Ethan, 22/11): the movie finder
+  opens a streaming app on a movie's page and can drive that app's menus (profile picker, title page, search). Never Play,
+  Resume, Rent, Buy or anything that pays, never while a movie's actually playing, and never pictures of other apps.
 - Outlook is read only (never send, move or change read status). Never touch AroFlo admin or settings areas.
 - Commit as `-c user.name="Ethan Callaghan" -c user.email="Badseed26@users.noreply.github.com"`, push with
   `git -c push.negotiate=true push`.
@@ -236,7 +236,7 @@ the TV keeps a long poll open to it (`Link.java`), so a tool call reaches the TV
 - Sign in: OAuth with dynamic client registration; the sign in page takes Ethan's OWNER_PASSWORD (5 wrong tries locks
   it 15 min). Only Claude's own callback addresses can register. Tokens are stored hashed; access 24 h, refresh 60 days.
 - Tools: tv_screen (picture), tv_tap, tv_type, tv_key, tv_scroll, tv_status, tv_filer, tv_view, tv_job (any api job,
-  waits for the answer, pictures come back as images), tv_wait, tv_pictures, tv_pair.
+  waits for the answer, pictures come back as images), tv_wait, tv_pictures, tv_pair, tv_movie and tv_stream (movie finder).
 - Pairing: tv_pair gives a line to send on the Todoist remote (`link <relay url> <code>`, 15 min, 5 tries). The TV swaps
   the code for its own key (Keystore). `link` says how the link's going, `link off` unpairs.
 - The TV side only runs the phone page's own actions (`RemoteServer.local`, never logins or the PIN) and api jobs, so
@@ -270,6 +270,17 @@ Ethan asks a chat "find <movie>" and Claude uses `tv_movie` (relay) or `tv_job` 
   The answer's `how` says which took and `front` is the app now on top (package name only, like the phone page).
 - `movie.apps {set:[...], rent:[...]}`: his logged in apps and rent apps, kept in the app's own storage (`movies` prefs).
   Until `set` is sent every streaming app on the TV counts as logged in (the answer's `note` says so).
+- Streaming app menus (`Stream.java`, Ethan 22/11: the apps always stopped on "Who's watching"): the accessibility helper
+  reads the app's screen as text and presses things. After movie.open it watches 25 s for a profile picker, presses
+  Ethan's profile (`movie.apps {profile}`, a name or {app: name}) and sends the movie's link again (apps drop it once a
+  profile's picked). `movie.look`, `movie.press {ref|text}`, `movie.key {back, home, enter, up, down, left, right}`,
+  `movie.type {text}` (relay `tv_stream`). Only on streaming apps (KNOWN or his logged in list) with the TV on.
+  Never pressed (`Stream.BLOCK`, whole words on the thing and its inside text): play, resume, watch, start, rent, buy,
+  pay, subscribe, sign up, trial, upgrade, sign out, delete, remove, pin and friends. Hands off while playing (a seek bar
+  on screen, or sound with under 4 labels): everything's refused, and a press that starts playback gets Back pressed.
+  No `canTakeScreenshot` (capability change could knock the helper off, and other apps stay picture free). The helper
+  turns on FLAG_INCLUDE_NOT_IMPORTANT_VIEWS at start (runtime, not the XML) so tiles show up.
+  Not yet tested: whether Netflix's TV app shows its tiles to accessibility at all (some apps draw their own UI).
 - The TV's streaming apps are in `Movies.KNOWN` (same packages as the home screen tiles); others match by app name.
 - Not yet tested on the TV (22/11 it was on Live TV): whether JustWatch takes ANDROID_TV deep links, and which apps land
   on the title page from a web link vs just opening. Check each app the first time and note it here.

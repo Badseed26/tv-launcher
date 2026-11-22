@@ -34,11 +34,13 @@ import java.util.regex.Pattern;
  * Movie finder (22/11, Ethan's ask). Claude asks from a chat (tv_job or the Todoist remote):
  *   movie.find {q, year, type}         where it's streaming in Australia (JustWatch), which of those are on the TV and logged in
  *   movie.open {q, year, type, app}    the same, then opens the best app on the movie's page, ready for Ethan to press Play
- *   movie.apps {set:[...], rent:[...]} the streaming apps Ethan's logged into (kept on the TV), and the ones he rents from
+ *   movie.apps {set:[...], rent:[...], profile} the streaming apps Ethan's logged into (kept on the TV), the ones he rents
+ *                                  from, and his profile name ("Ethan", or per app {"Netflix":"Ethan","Stan":"E"})
+ *   movie.look, press, key, type     drive the streaming app's menus (Stream.java), never while a movie's playing
  * Order for open: a subscription or free app he's logged into, then the cheapest rent on an app he's logged into.
  * Nothing on a subscription he hasn't got gets opened, the answer just says where it is.
- * The TV only opens the app on the movie's page. It never presses Play, Rent or Buy and never reads or pictures the
- * other app's screen (only its package name, like the phone page).
+ * The TV opens the app on the movie's page and picks Ethan's profile if the app asks. It never presses Play, Rent or
+ * Buy, never pictures the other app, and only reads streaming apps' menus (never while a movie's playing).
  * Answered straight away, not through the Runner queue, so it works while Ethan's on another app.
  */
 final class Movies {
@@ -84,8 +86,14 @@ final class Movies {
                         case "movie.open":
                             out = find(c, a, true);
                             break;
+                        case "movie.look":
+                        case "movie.press":
+                        case "movie.key":
+                        case "movie.type":
+                            out = Stream.run(c, req.optString("do"), a);
+                            break;
                         default:
-                            out = Api.err("unknown movie request (movie.find, movie.open, movie.apps)");
+                            out = Api.err("unknown movie request (movie.find, movie.open, movie.apps, movie.look, movie.press, movie.key, movie.type)");
                     }
                 } catch (Exception e) {
                     out = Api.err(String.valueOf(e.getMessage()));
@@ -100,10 +108,12 @@ final class Movies {
     private static JSONObject apps(Context c, JSONObject a) throws Exception {
         if (a.has("set")) p(c).edit().putString("apps", list(a.opt("set")).toString()).apply();
         if (a.has("rent")) p(c).edit().putString("rent", list(a.opt("rent")).toString()).apply();
+        if (a.has("profile")) p(c).edit().putString("profile", String.valueOf(a.opt("profile")).trim()).apply();
         JSONObject o = new JSONObject();
         o.put("ok", true);
         o.put("loggedIn", mine(c, "apps"));
         o.put("rentFrom", mine(c, "rent"));
+        o.put("profile", p(c).getString("profile", ""));
         // what's on the TV that looks like a streaming app, so Claude can ask Ethan which he's logged into
         JSONArray on = new JSONArray();
         Map<String, String> all = installed(c);
@@ -136,6 +146,13 @@ final class Movies {
         String k = key(name);
         for (int i = 0; i < l.length(); i++) if (same(key(l.optString(i)), k)) return true;
         return false;
+    }
+
+    /** A streaming app Claude may drive the menus of: one of the TV's known ones, or one in his logged in list. */
+    static boolean isStreaming(Context c, String pkg) {
+        for (String[] k : KNOWN) if (k[1].equals(pkg)) return true;
+        String name = Screen.appName(c, pkg);
+        return !name.equals(pkg) && inList(mine(c, "apps"), name);
     }
 
     /** Plain key for an app or service name: "Disney+" and "Disney Plus" both come out "disney". */
@@ -457,6 +474,7 @@ final class Movies {
         }
 
         final AtomicReference<String> used = new AtomicReference<>();
+        final AtomicReference<Intent> sent = new AtomicReference<>();
         final CountDownLatch done = new CountDownLatch(1);
         main.post(new Runnable() {
             @Override
@@ -473,6 +491,7 @@ final class Movies {
                                 if (p.resolveActivity(in, 0) == null) continue;
                             }
                             from.startActivity(in);
+                            sent.set(in);
                             used.set(how.get(i));
                             return;
                         } catch (Exception ignored) {
@@ -501,10 +520,27 @@ final class Movies {
         }
         o.put("how", u.equals("app only") ? "opened " + w.optString("tvApp") + " but couldn't go straight to the movie, search for it there" : u);
         TvLog.line(c, "Movies: " + o.optString("title") + " on " + w.optString("tvApp") + " (" + u + ")");
-        // the front app's name only, same as the phone page (we never see inside it)
-        Thread.sleep(5000);
+        // a profile picker gets Ethan's profile, then the link goes again
+        final Intent again = sent.get();
+        Stream.afterOpen(c, pkg, w.optString("tvApp"), new Runnable() {
+            @Override
+            public void run() {
+                if (again == null) return;
+                main.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            Context from = HomeButtonService.instance != null ? HomeButtonService.instance : c;
+                            from.startActivity(again);
+                        } catch (Exception ignored) {
+                        }
+                    }
+                });
+            }
+        }, o);
+        Thread.sleep(1500);
         o.put("front", Screen.name(c));
-        o.put("checkTv", "the TV can't see inside " + w.optString("tvApp") + ", so check the screen: it may stop on a profile picker first");
+        o.put("next", "movie.look shows the app's screen, to check it's on the movie's page");
         return true;
     }
 }
