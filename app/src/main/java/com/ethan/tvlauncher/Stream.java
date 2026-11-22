@@ -183,7 +183,7 @@ final class Stream {
     // ---------------------------------------------------------------- the profile picker after movie.open
 
     /** Up to 25 s after the app opens: on a profile picker, pick Ethan's profile and send the movie's link again. */
-    static void afterOpen(Context c, String pkg, String appName, Runnable again, JSONObject o) {
+    static void afterOpen(Context c, String pkg, String appName, String asked, Runnable again, JSONObject o) {
         HomeButtonService h = HomeButtonService.instance;
         if (h == null) return;
         long until = System.currentTimeMillis() + 25000;
@@ -209,7 +209,8 @@ final class Stream {
                     String t = deep(n);
                     if (!t.isEmpty() && t.length() < 40 && !PROFILE_SCREEN.matcher(norm(t.toLowerCase(Locale.US))).find()) names.put(t);
                 }
-                String want = profileFor(c, appName);
+                // who Ethan said to watch as this time, else his saved profile (Ethan, 22/11)
+                String want = asked != null && !asked.trim().isEmpty() ? asked.trim() : profileFor(c, appName);
                 if (want.isEmpty()) {
                     o.put("profilePicker", "it's on the profile picker and Ethan's profile isn't set (movie.apps {profile}). On screen: " + names);
                     return;
@@ -224,7 +225,8 @@ final class Stream {
                     }
                 }
                 if (hit == null) {
-                    o.put("profilePicker", "it's on the profile picker but there's no " + want + " on it. On screen: " + names);
+                    o.put("profilePicker", "it's on the profile picker and there's no " + want + " on it, so it stopped: ask Ethan who to watch as"
+                            + " (then movie.open again with profile, or tv_stream press). On screen: " + names);
                     return;
                 }
                 if (!click(hit)) {

@@ -268,11 +268,12 @@ Ethan asks a chat "find <movie>" and Claude uses `tv_movie` (relay) or `tv_job` 
   Wakes the TV if it's off. Tries JustWatch's Android TV deep link (asked for, dropped if JustWatch refuses it), then
   `netflix://title/<id>` for Netflix, then the offer's web link aimed at the app's package, then just opens the app.
   The answer's `how` says which took and `front` is the app now on top (package name only, like the phone page).
-- `movie.apps {set:[...], rent:[...]}`: his logged in apps and rent apps, kept in the app's own storage (`movies` prefs).
+- Ethan's logged into every streaming app on the home screen (22/11). `movie.apps {set:[...], rent:[...]}`: his logged in apps and rent apps, kept in the app's own storage (`movies` prefs).
   Until `set` is sent every streaming app on the TV counts as logged in (the answer's `note` says so).
 - Streaming app menus (`Stream.java`, Ethan 22/11: the apps always stopped on "Who's watching"): the accessibility helper
   reads the app's screen as text and presses things. After movie.open it watches 25 s for a profile picker, presses
-  Ethan's profile (`movie.apps {profile}`, a name or {app: name}) and sends the movie's link again (apps drop it once a
+  Ethan's profile (`movie.apps {profile}`, "Ethan" in every app; movie.open `profile` or tv_movie `watchAs` for someone else
+  that time). If that profile isn't on the picker it stops and the answer says to ask Ethan who to watch as and sends the movie's link again (apps drop it once a
   profile's picked). `movie.look`, `movie.press {ref|text}`, `movie.key {back, home, enter, up, down, left, right}`,
   `movie.type {text}` (relay `tv_stream`). Only on streaming apps (KNOWN or his logged in list) with the TV on.
   Never pressed (`Stream.BLOCK`, whole words on the thing and its inside text): play, resume, watch, start, rent, buy,

@@ -33,7 +33,7 @@ import java.util.regex.Pattern;
 /**
  * Movie finder (22/11, Ethan's ask). Claude asks from a chat (tv_job or the Todoist remote):
  *   movie.find {q, year, type}         where it's streaming in Australia (JustWatch), which of those are on the TV and logged in
- *   movie.open {q, year, type, app}    the same, then opens the best app on the movie's page, ready for Ethan to press Play
+ *   movie.open {q, year, type, app, profile}  the same, then opens the best app on the movie's page, ready for Ethan to press Play
  *   movie.apps {set:[...], rent:[...], profile} the streaming apps Ethan's logged into (kept on the TV), the ones he rents
  *                                  from, and his profile name ("Ethan", or per app {"Netflix":"Ethan","Stan":"E"})
  *   movie.look, press, key, type     drive the streaming app's menus (Stream.java), never while a movie's playing
@@ -338,7 +338,7 @@ final class Movies {
                 + ("rent".equals(pick.optString("kind")) && missing.length() > 0 ? ", it's not on any of Ethan's subscriptions" : ""));
         if (!open) return o;
 
-        o.put("opened", launch(c, pick, o));
+        o.put("opened", launch(c, pick, a.optString("profile"), o));
         return o;
     }
 
@@ -426,7 +426,7 @@ final class Movies {
     // ---------------------------------------------------------------- opening it
 
     /** Wakes the TV if it's off, opens the app on the movie's page (deep link, then its web link, then just the app). */
-    private static boolean launch(final Context c, JSONObject w, JSONObject o) throws Exception {
+    private static boolean launch(final Context c, JSONObject w, String profile, JSONObject o) throws Exception {
         final String pkg = w.optString("pkg");
         final List<Intent> tries = new ArrayList<>();
         final List<String> how = new ArrayList<>();
@@ -522,7 +522,7 @@ final class Movies {
         TvLog.line(c, "Movies: " + o.optString("title") + " on " + w.optString("tvApp") + " (" + u + ")");
         // a profile picker gets Ethan's profile, then the link goes again
         final Intent again = sent.get();
-        Stream.afterOpen(c, pkg, w.optString("tvApp"), new Runnable() {
+        Stream.afterOpen(c, pkg, w.optString("tvApp"), profile, new Runnable() {
             @Override
             public void run() {
                 if (again == null) return;
