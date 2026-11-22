@@ -483,7 +483,9 @@ final class Stream {
         }
         AudioManager am = (AudioManager) c.getSystemService(Context.AUDIO_SERVICE);
         if (texts >= 4 || am == null || !am.isMusicActive()) return false;
-        if (Shell.ready(c, 4000)) {
+        // the helper takes about 5 s to start from cold (23/11: a 4 s wait gave up just before it came up, and the
+        // old guess then locked Claude out of YouTube's search results over an ad's preview)
+        if (Shell.ready(c, 12000)) {
             int v = Shell.video();
             if (v >= 0) return v == 1;
         }

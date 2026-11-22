@@ -366,12 +366,13 @@ final class Movies {
         JSONObject w = new JSONObject().put("pkg", pkg).put("tvApp", all.get(pkg)).put("app", a.optString("app"));
         boolean yt = pkg.equals("com.google.android.youtube.tv");
         String find = q + ("SHOW".equals(type) ? "" : " movie");
-        if (yt) w.put("url", "https://www.youtube.com/results?search_query=" + java.net.URLEncoder.encode(find, "UTF-8"));
+        if (yt) w.put("url", "https://www.youtube.com/results?search_query=" + java.net.URLEncoder.encode(find, "UTF-8").replace("+", "%20"));
         o.put("plan", "JustWatch doesn't list it on " + all.get(pkg) + ", so open " + all.get(pkg) + " to search for it there");
         o.put("opened", launch(c, w, a.optString("profile"), o));
-        o.put("next", yt ? "Look at tv_screen. If it's not showing search results for the title: key up (top bar), right (search), enter, type \""
-                + find + "\", then left and down to the matching suggestion and enter. Enter on the movie's card (it shows a price) opens its page. "
-                + "Stop there with Buy or rent focused, never press it."
+        o.put("next", yt ? "Look at tv_screen. It should be on search results for the title (if not: key up to the top bar, right to search, enter, type \""
+                + find + "\", then left and down to the matching suggestion and enter). The first result is often a sponsored ad with a preview playing: "
+                + "move with the arrows to the movie's own card (it shows a price and a rating) and enter. "
+                + "Stop on the movie's page with Buy or rent focused, never press it."
                 : "Find it with tv_screen and tv_stream: the app's search, arrows, enter.");
         return o;
     }
@@ -467,6 +468,8 @@ final class Movies {
 
     /** Wakes the TV if it's off, opens the app on the movie's page (deep link, then its web link, then just the app). */
     private static boolean launch(final Context c, JSONObject w, String profile, JSONObject o) throws Exception {
+        // get the Shell helper going now (about 5 s from cold), so real keys and the playing check are there for what comes next
+        Shell.ensure(c);
         final String pkg = w.optString("pkg");
         final List<Intent> tries = new ArrayList<>();
         final List<String> how = new ArrayList<>();

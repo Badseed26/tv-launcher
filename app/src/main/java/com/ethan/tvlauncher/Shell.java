@@ -370,11 +370,12 @@ final class Shell {
      * has to watch for a moment).
      */
     static int video() {
-        long until = System.currentTimeMillis() + 3500;
+        long until = System.currentTimeMillis() + 6000;
         while (up() && System.currentTimeMillis() < until) {
             synchronized (frameLock) {
                 mirror();
-                if (System.currentTimeMillis() - statAt < 1500 && (statVideo || statAge >= 1200)) return statVideo || statBlack >= 85 ? 1 : 0;
+                // 90% black: a protected movie is all black to the mirror bar its subtitles. YouTube's dark pages aren't that dark.
+                if (System.currentTimeMillis() - statAt < 1500 && (statVideo || statAge >= 1200)) return statVideo || statBlack >= 90 ? 1 : 0;
             }
             try {
                 Thread.sleep(100);

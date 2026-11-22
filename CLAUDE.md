@@ -365,8 +365,14 @@ Ethan asks a chat "find <movie>" and Claude uses `tv_movie` (relay) or `tv_job` 
       the show's page (.../shows/<slug>/). Stan's /programs/ link already lands on the show page.
     - JustWatch lists one app several times (Netflix, Netflix Kids, Netflix Standard with Ads): `where` is one line per
       TV app and kind now.
-- Not yet tested: Paramount+'s show page link, YouTube's search link, Netflix (links, picker, whether it can be read),
-  a real PIN pad. Note each app here once seen.
+  - 23/11, build 106: YouTube's search link works (movie.open with app YouTube lands on the TV app's search results),
+    but the words showed with plus signs (107 sends %20). The first result was a sponsored ad with a preview playing,
+    and a key right was refused as "a movie's playing": the helper had just been restarted by the update, takes about
+    5 s from cold (link up, then 3 s for app_process), and `Stream.playing` only waited 4 s before falling back to the
+    old guess. 107 waits 12 s, gives the mirror 6 s, starts the helper as soon as movie.open launches an app, and the
+    black test is 90% (YouTube's dark pages read about 40 to 60% black).
+- Not yet tested: Paramount+'s show page link, Netflix (links, picker, whether it can be read), a real PIN pad.
+  Note each app here once seen.
 
 ## AroFlo session limit
 AroFlo caps how many devices can be signed in as one user. When Ethan signs in elsewhere, the TV gets the User
