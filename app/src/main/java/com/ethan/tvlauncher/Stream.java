@@ -313,6 +313,48 @@ final class Stream {
         }
     }
 
+    // ---------------------------------------------------------------- the phone page's picture
+
+    /** The streaming app on screen right now (package), or null. */
+    static String front(Context c) {
+        HomeButtonService h = HomeButtonService.instance;
+        PowerManager pm = (PowerManager) c.getSystemService(Context.POWER_SERVICE);
+        if (h == null || Screen.top != null || (pm != null && !pm.isInteractive())) return null;
+        AccessibilityNodeInfo root = h.getRootInActiveWindow();
+        String pkg = root == null || root.getPackageName() == null ? "" : root.getPackageName().toString();
+        return streaming(c, pkg) ? pkg : null;
+    }
+
+    static boolean playingNow(Context c) {
+        HomeButtonService h = HomeButtonService.instance;
+        return h != null && playing(c, h.getRootInActiveWindow());
+    }
+
+    /** Ethan's tap on the phone page picture: presses the smallest thing under his finger (fx, fy 0 to 1 across the screen). */
+    static boolean tapAt(Context c, float fx, float fy) {
+        HomeButtonService h = HomeButtonService.instance;
+        if (h == null) return false;
+        AccessibilityNodeInfo root = h.getRootInActiveWindow();
+        if (root == null) return false;
+        android.util.DisplayMetrics dm = new android.util.DisplayMetrics();
+        ((android.view.WindowManager) c.getSystemService(Context.WINDOW_SERVICE)).getDefaultDisplay().getRealMetrics(dm);
+        int x = Math.round(fx * dm.widthPixels), y = Math.round(fy * dm.heightPixels);
+        android.graphics.Rect r = new android.graphics.Rect();
+        AccessibilityNodeInfo best = null;
+        long area = Long.MAX_VALUE;
+        for (AccessibilityNodeInfo n : nodes(root)) {
+            if (!n.isClickable() && !n.isFocusable()) continue;
+            n.getBoundsInScreen(r);
+            if (!r.contains(x, y)) continue;
+            long a = (long) r.width() * r.height();
+            if (a < area) {
+                area = a;
+                best = n;
+            }
+        }
+        return best != null && click(best);
+    }
+
     // ---------------------------------------------------------------- bits
 
     static boolean streaming(Context c, String pkg) {

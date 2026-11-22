@@ -269,6 +269,11 @@ final class RemoteServer {
                 })));
                 return;
             case "/api/tap":
+                // 22/11: a streaming app gets the tap pressed on whatever's under it (Ethan's phone only, Claude has tv_stream)
+                if (Stream.front(c) != null) {
+                    json(out, ok(!viaLink && Stream.tapAt(c, num(a.get("x")), num(a.get("y")))));
+                    return;
+                }
                 // 20/11: a Filer page gets the Filer's own tap, any other screen of ours (home, all apps, Runner,
                 // the Filer screen) a plain tap. Another app gets nothing.
                 json(out, ok(onTop(new TopJob() {
@@ -501,6 +506,29 @@ final class RemoteServer {
      * TV being off gets a 409 with a line saying so, never a picture.
      */
     private void shot(OutputStream out) throws Exception {
+        // a streaming app up (22/11): the accessibility helper's picture of the screen, never while a movie's playing
+        String sp = Stream.front(c);
+        HomeButtonService hs = HomeButtonService.instance;
+        if (sp != null && hs != null) {
+            String n = Screen.appName(c, sp);
+            if (Stream.playingNow(c)) {
+                send(out, 409, "text/plain", ("On the TV: " + n + " (playing, no picture while a movie's on)").getBytes(StandardCharsets.UTF_8), null);
+                return;
+            }
+            final CountDownLatch got = new CountDownLatch(1);
+            final AtomicReference<byte[]> jpg = new AtomicReference<>();
+            hs.shot(new Screen.Shot() {
+                @Override
+                public void done(byte[] b) {
+                    jpg.set(b);
+                    got.countDown();
+                }
+            });
+            got.await(6, TimeUnit.SECONDS);
+            if (jpg.get() != null) send(out, 200, "image/jpeg", jpg.get(), null, "Cache-Control: no-store");
+            else send(out, 409, "text/plain", ("On the TV: " + n).getBytes(StandardCharsets.UTF_8), null);
+            return;
+        }
         final CountDownLatch done = new CountDownLatch(1);
         final AtomicReference<byte[]> img = new AtomicReference<>();
         final AtomicReference<String> why = new AtomicReference<>();

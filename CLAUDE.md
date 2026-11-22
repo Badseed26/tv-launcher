@@ -9,7 +9,8 @@ This repo is **public**: never put logins, PINs, tokens, IP addresses or the bus
 - No em dashes anywhere (code, comments, commits, notes). Plain, short Aussie English in comments.
 - Remote control is for the Filer only, never Netflix or other apps on the TV. Exception (Ethan, 22/11): the movie finder
   opens a streaming app on a movie's page and can drive that app's menus (profile picker, title page, search). Never Play,
-  Resume, Rent, Buy or anything that pays, never while a movie's actually playing, and never pictures of other apps.
+  Resume, Rent, Buy or anything that pays, and never while a movie's actually playing. Pictures of streaming app menus
+  are fine (Ethan, 22/11: "I only don't want video playback"), never of playback, and never of other apps or HDMI.
 - Outlook is read only (never send, move or change read status). Never touch AroFlo admin or settings areas.
 - Commit as `-c user.name="Ethan Callaghan" -c user.email="Badseed26@users.noreply.github.com"`, push with
   `git -c push.negotiate=true push`.
@@ -45,7 +46,7 @@ This repo is **public**: never put logins, PINs, tokens, IP addresses or the bus
    while it's being used and hides again 2 min after.
    From 20/11 the picture is whatever the TV app has on screen at all times (home, all apps, Filer, Runner, and any
    screen we add later, as long as it calls `Screen.on/off` in onResume/onPause). Any other app or HDMI only gets its
-   name in a text box (streaming apps get the streaming panel, see Movie finder), never a picture: HomeButtonService notes the front app's package name (nothing else) for that.
+   name in a text box (streaming apps show, see Movie finder), never a picture: HomeButtonService notes the front app's package name (nothing else) for that.
    Taps, Back, Enter and scroll work on any of our screens (`Screen.tap/key`; a Filer page still gets the Filer's
    own tap). The page reloads itself when the TV's build changes, so an old copy never runs against a new build.
 3. **ADB** from AirHQ: `am broadcast` to SecretsReceiver (saves logins into the Keystore) and CodeReceiver (log,
@@ -279,7 +280,7 @@ Ethan asks a chat "find <movie>" and Claude uses `tv_movie` (relay) or `tv_job` 
   Never pressed (`Stream.BLOCK`, whole words on the thing and its inside text): play, resume, watch, start, rent, buy,
   pay, subscribe, sign up, trial, upgrade, sign out, delete, remove, pin and friends. Hands off while playing (a seek bar
   on screen, or sound with under 4 labels): everything's refused, and a press that starts playback gets Back pressed.
-  No `canTakeScreenshot` (capability change could knock the helper off, and other apps stay picture free). The helper
+  The helper
   turns on FLAG_INCLUDE_NOT_IMPORTANT_VIEWS at start (runtime, not the XML) so tiles show up.
   Not yet tested: whether Netflix's TV app shows its tiles to accessibility at all (some apps draw their own UI).
 - The TV's streaming apps are in `Movies.KNOWN` (same packages as the home screen tiles); others match by app name.
@@ -291,9 +292,13 @@ Ethan asks a chat "find <movie>" and Claude uses `tv_movie` (relay) or `tv_job` 
   picker reads fine (tiles say "Access Ethan's profile", each twice; Nat's is "pin protected"), pressing Ethan's landed
   straight on the title page with PLAY focused and nothing playing. Build 99 on matches the "Access X's profile" form,
   stops on a PIN profile, and a look marks blocked things "(won't press)".
-- Phone page streaming panel (22/11, build 100 on, Ethan: "I can't see Disney so how would I key the code"). When a
-  streaming app's in front (`status.stream`), the phone page swaps its key rows for a list of what's on the app's screen
-  (tap a line to press it, the focused one highlighted, refreshed every 2 s), Back, Home, arrows, OK, and a PIN or search
+- Phone page streaming panel (22/11, Ethan: "I can't see Disney so how would I key the code"). Build 100 had a text list
+  of the app's screen; build 101 on shows the app itself instead ("just stream the Disney screen like the app"):
+  `home_service.xml` has `canTakeScreenshot` and `HomeButtonService.shot` takes the whole screen (Android 11 API, at
+  most one a second), only when `Stream.front` is a streaming app and never while `Stream.playing` (the page says
+  "playing, no picture"; protected video is black in it anyway). Claude's tv_screen gets the same picture. A tap on the
+  picture presses the smallest clickable or focusable thing under it (`Stream.tapAt`, phone only; the relay's tv_tap is
+  refused there, Claude uses tv_stream with its blocks). Under the picture: Back, Home, arrows, OK, and a PIN or search
   box. `/api/stream` (GET look, POST do press|key|type), phone only (not in LINK_OK, refused via the relay). It runs
   `Stream.run(..., owner=true)`: Ethan's own, so no block list, works while playing, no back out. Typing digits with no
   text box on screen presses each digit's button (PIN pads), and the answer never echoes a PIN.

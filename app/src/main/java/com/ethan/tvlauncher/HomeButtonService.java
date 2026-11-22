@@ -47,6 +47,45 @@ public class HomeButtonService extends AccessibilityService {
         handler.postDelayed(home, 4000);
     }
 
+    /**
+     * A picture of the whole screen (Android 11 on), for the phone page when a streaming app's up (Ethan, 22/11: like
+     * the app's own screens, just never video playback). Protected video comes out black anyway, and the phone page
+     * doesn't ask while a movie's playing. Null when it can't (too soon after the last one, under a second).
+     */
+    void shot(final Screen.Shot cb) {
+        if (android.os.Build.VERSION.SDK_INT < 30) {
+            cb.done(null);
+            return;
+        }
+        try {
+            takeScreenshot(android.view.Display.DEFAULT_DISPLAY, getMainExecutor(), new TakeScreenshotCallback() {
+                @Override
+                public void onSuccess(ScreenshotResult r) {
+                    byte[] jpg = null;
+                    try {
+                        android.hardware.HardwareBuffer hb = r.getHardwareBuffer();
+                        android.graphics.Bitmap hw = android.graphics.Bitmap.wrapHardwareBuffer(hb, r.getColorSpace());
+                        if (hw != null) {
+                            android.graphics.Bitmap sw = hw.copy(android.graphics.Bitmap.Config.ARGB_8888, false);
+                            hw.recycle();
+                            if (sw != null) jpg = Screen.jpeg(sw, sw.getWidth());
+                        }
+                        hb.close();
+                    } catch (Throwable ignored) {
+                    }
+                    cb.done(jpg);
+                }
+
+                @Override
+                public void onFailure(int code) {
+                    cb.done(null);
+                }
+            });
+        } catch (Throwable e) {
+            cb.done(null);
+        }
+    }
+
     /** After an auto run that started with the TV off: go home, then put the TV back to sleep. */
     static void sleepTvSoon(final android.content.Context c) {
         final HomeButtonService h = instance;

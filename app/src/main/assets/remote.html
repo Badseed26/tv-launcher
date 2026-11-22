@@ -37,11 +37,6 @@ h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--mute
 .fold{display:flex;align-items:center;justify-content:space-between;width:100%;border:0;background:transparent;color:var(--mute);padding:0;margin:18px 2px 0;font:600 12px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;text-transform:uppercase;letter-spacing:.08em}
 .fold .chev{display:inline-block;width:22px;height:22px;line-height:22px;text-align:center;border-radius:50%;background:var(--card);border:1px solid var(--line);transition:transform .2s;font-size:13px;color:var(--text)}
 .fold.shut .chev{transform:rotate(-90deg)}
-.slist{margin-top:10px;max-height:300px;overflow:auto;border:1px solid var(--line);border-radius:12px;background:var(--card)}
-.slist button{display:block;width:100%;text-align:left;border:0;border-bottom:1px solid var(--line);background:transparent;color:var(--text);padding:10px 12px;font-size:14px}
-.slist button:last-child{border-bottom:0}
-.slist button.focus{background:linear-gradient(135deg,rgba(111,140,255,.25),rgba(138,91,255,.25));font-weight:600}
-.slist button.box{color:var(--blue)}
 .sigpad{display:block;width:100%;aspect-ratio:5/2;margin-top:10px;border-radius:12px;background:#fff;touch-action:none;border:1px solid var(--line)}
 </style></head><body>
 <header><h1>TV Filer</h1><div class="chips" id="chips"></div></header>
@@ -53,8 +48,7 @@ h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--mute
 <div id="ourkeys"><div class="row"><button class="btn" data-k="back">Back</button><button class="btn" data-scroll="-500">Scroll up</button><button class="btn" data-scroll="500">Scroll down</button><button class="btn" data-k="reload">Reload page</button></div>
 <div class="row"><button class="btn" data-k="enter">Enter</button><button class="btn" data-k="tab">Tab</button><button class="btn" data-k="backspace">Delete</button><button class="btn" data-k="escape">Esc</button></div></div>
 <div id="stream" hidden>
-<div class="slist" id="slist"></div>
-<p class="small" id="snote">Tap a line to press it on the TV. The highlighted one has the TV's focus.</p>
+<p class="small" id="snote">Tap the picture to press that spot, or move around with the arrows and OK.</p>
 <div class="row"><button class="btn" data-sk="back">Back</button><button class="btn" data-sk="up">Up</button><button class="btn" data-sk="home">Home</button></div>
 <div class="row"><button class="btn" data-sk="left">Left</button><button class="btn primary" data-sk="enter">OK</button><button class="btn" data-sk="right">Right</button></div>
 <div class="row"><span></span><button class="btn" data-sk="down">Down</button><span></span></div>
@@ -84,7 +78,7 @@ h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--mute
 <div class="row"><input id="luser" placeholder="Email or username" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
 <div class="row"><input id="lpass" type="password" placeholder="Password" autocomplete="new-password"><button class="btn primary" id="lsave" style="flex:0 0 76px">Save</button></div>
 <p class="small">For Claude's jobs on the TV. Saved in the TV's locked storage and only the TV app reads it back: it signs itself in when a site logs it out. Claude never sees it. Save again to change one.</p>
-<p class="small">The picture is whatever the TV app has on screen (home screen, Filer or Runner). Any other app just shows its name. Streaming apps (Netflix, Disney+ and co) get a list of what's on their screen instead, with arrows and a box for a PIN. Tap the picture to tap the TV. On the Filer, the Outlook or AroFlo page you pick shows on the TV while you use it, going back behind the Filer screen 2 min after you stop.</p>
+<p class="small">The picture is whatever the TV app has on screen (home screen, Filer or Runner). Any other app just shows its name. Streaming apps (Netflix, Disney+ and co) show too, with arrows and a box for a PIN, but never while a movie's playing. Tap the picture to tap the TV. On the Filer, the Outlook or AroFlo page you pick shows on the TV while you use it, going back behind the Filer screen 2 min after you stop.</p>
 
 <script>
 var S={which:null,st:{},gen:0};
@@ -105,7 +99,7 @@ function status(){
     if(o.filer)S.prev=o;
     $('chips').innerHTML='<span class="chip">TV <b>'+(o.on||'-')+'</b></span>'+(o.filer?chip('Outlook',o.outlook)+chip('AroFlo',o.aroflo):'<span class="chip"><b>Filer closed</b></span>')+'<span class="chip">build <b>'+o.build+'</b></span>';
     $('seg').hidden=!o.filer;$('pagectl').hidden=!o.filer;
-    $('ourkeys').hidden=!!o.stream;if(!!o.stream!==!$('stream').hidden){$('stream').hidden=!o.stream;if(o.stream)slook();}
+    $('ourkeys').hidden=!!o.stream;$('stream').hidden=!o.stream;
     if(o.filer){document.querySelectorAll('.seg button').forEach(function(b){b.classList.toggle('on',b.dataset.s===(o.which||''));});}
     $('note').textContent=o.note||(o.check?'Last mail check '+o.check:'');
     if(o.days&&!$('day').options.length){$('day').innerHTML=o.days.map(function(d){return '<option value="'+d[0]+'">'+d[1]+'</option>';}).join('');}
@@ -138,7 +132,7 @@ function shot(){
   }).catch(function(){}).then(function(){timer=setTimeout(shot,1200);});
 }
 $('img').addEventListener('click',function(e){
-  if(!$('msg').hidden){$('note').textContent='Taps only work on the TV app\'s own screens.';return;}
+  if(!$('msg').hidden){$('note').textContent='Taps only work while there\'s a picture.';return;}
   var r=this.getBoundingClientRect(),x=(e.clientX-r.left)/r.width,y=(e.clientY-r.top)/r.height;
   var d=document.createElement('div');d.className='dot';d.style.left=(e.clientX-r.left)+'px';d.style.top=(e.clientY-r.top)+'px';$('screen').appendChild(d);setTimeout(function(){d.remove();},700);
   post('/api/tap',{x:x.toFixed(4),y:y.toFixed(4)}).then(function(){setTimeout(shot,350);});
@@ -151,23 +145,8 @@ document.querySelectorAll('[data-c]').forEach(function(b){b.onclick=function(){
   post('/api/cmd',{c:b.dataset.c}).then(function(){setTimeout(status,400);setTimeout(status,3000);});
 };});
 $('pull').onclick=function(){var d=$('day').value;if(!d)return;var t=$('day').options[$('day').selectedIndex].text;if(!confirm('Pull the inbox for '+t+' on the TV?'))return;post('/api/cmd',{c:'pull:'+d}).then(function(){setTimeout(status,400);setTimeout(status,3000);});};
-// Streaming panel (22/11): the streaming app's screen as a list, from the TV's accessibility helper
-var stimer=null,sbusy=false;
-function sdraw(o){
-  if(!o||o.ok===false&&!o.screen){$('snote').textContent=(o&&o.err)||'Can\'t read the app right now';return;}
-  var l=o.screen||[];
-  $('slist').innerHTML=l.length?l.map(function(it){return '<button data-ref="'+it.ref+'" class="'+(it.focus?'focus ':'')+(it.box?'box':'')+'">'+it.t.replace(/[&<]/g,function(c){return c=='&'?'&amp;':'&lt;';})+'</button>';}).join(''):'<button disabled>Nothing readable on screen'+(o.playing?' (playing)':'')+'</button>';
-  $('snote').textContent=o.err?o.err:o.playing?(o.app||'The app')+' looks like it\'s playing.':'Tap a line to press it on the TV. The highlighted one has the TV\'s focus.';
-  $('slist').querySelectorAll('[data-ref]').forEach(function(b){b.onclick=function(){sdo({'do':'press',ref:b.dataset.ref});};});
-  var f=$('slist').querySelector('.focus');if(f&&f.scrollIntoView)f.scrollIntoView({block:'nearest'});
-}
-function slook(){
-  clearTimeout(stimer);
-  if($('stream').hidden||document.hidden){stimer=setTimeout(slook,2000);return;}
-  if(sbusy){stimer=setTimeout(slook,800);return;}
-  fetch('/api/stream',{cache:'no-store'}).then(function(r){if(r.status==401){location.reload();throw 0;}return r.json();}).then(sdraw).catch(function(){}).then(function(){stimer=setTimeout(slook,2000);});
-}
-function sdo(d){sbusy=true;post('/api/stream',d).then(sdraw).catch(function(){}).then(function(){sbusy=false;});}
+// Streaming panel (22/11): arrows, OK and a PIN or search box for the streaming app; the picture above is the app itself
+function sdo(d){post('/api/stream',d).then(function(o){$('snote').textContent=o&&o.err?o.err:'Tap the picture to press that spot, or move around with the arrows and OK.';setTimeout(shot,200);}).catch(function(){});}
 document.querySelectorAll('[data-sk]').forEach(function(b){b.onclick=function(){sdo({'do':'key',key:b.dataset.sk});};});
 $('ssend').onclick=function(){var t=$('stext').value;if(!t)return;$('stext').value='';sdo({'do':'type',text:t});};
 $('send').onclick=function(){var t=$('text').value;if(!t)return;post('/api/type',{text:t}).then(function(){$('text').value='';setTimeout(shot,300);});};
