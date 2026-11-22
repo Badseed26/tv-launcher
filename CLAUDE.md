@@ -302,7 +302,33 @@ Ethan asks a chat "find <movie>" and Claude uses `tv_movie` (relay) or `tv_job` 
   box. `/api/stream` (GET look, POST do press|key|type), phone only (not in LINK_OK, refused via the relay). It runs
   `Stream.run(..., owner=true)`: Ethan's own, so no block list, works while playing, no back out. Typing digits with no
   text box on screen presses each digit's button (PIN pads), and the answer never echoes a PIN.
-- Not yet tested: the other apps' links and pickers, the panel's arrows (focusSearch) and a real PIN pad. Note each app here once seen.
+- Shell helper (22/11, build 102 on): real remote keys and the live picture. Why: another chat got stuck on YouTube's
+  "Who's watching" (YouTube and Netflix draw their own screens, the accessibility helper's presses and focus moves do
+  nothing there), Disney+ only opened its lower rows for a real Down, the accessibility screenshots flickered the TV
+  (one a second, each one flips how the TV draws) and were slow.
+  - `Adb.java`: a small ADB client. The app connects to the TV's own debugging service on 127.0.0.1:5555 (the one AirHQ
+    uses) with its own key (`files/shell.key`). First time the TV shows "Allow USB debugging?" and Ethan ticks Always
+    allow with the TV remote: that's his OK, nothing presses it for him. Tested here against a stand-in adbd (sign in,
+    key layout, streams).
+  - `ShellMain.java`: started over that link with `app_process` out of our own APK, so it runs as the shell user (how
+    Shizuku and scrcpy do it). It injects real key events, taps and typed text (InputManager), and mirrors the screen
+    into an ImageReader (SurfaceControl.createDisplay, not secure, so protected video stays black) as JPEGs, 960 wide,
+    8 a second tops and only when the screen changes. It talks only to the app over a local socket the app opened
+    (random token), stops mirroring 5 s after the last ask and exits when the socket closes.
+  - `Shell.java`: the app's end. Fixed asks only (keys off a short list, tap, text, picture): no job, relay tool or phone
+    button can run a command of its own. `ensure` starts it (one go a minute), `ready` waits a few seconds for it once
+    it's been allowed, `idle` (every beat) closes it after 10 min unused (it's a whole process on a low RAM TV).
+    `tv.shell` shows how it's going with its log, `{start:true}`, `{off:true|false}`, `{port:n}`.
+  - With it up: the phone page's picture of a streaming app is live (`/api/shot?after=<seq>` waits for the next frame,
+    204 when nothing moved, `X-Seq` on each), arrows, OK, Back and Home are real keys for Ethan and for Claude's
+    tv_stream, a press the app ignores gets a real tap in its middle, a tap on the picture with nothing readable under
+    it is a real tap, and text with no box to put it in is typed as keys. Without it everything works the old way.
+  - Still never while a movie's playing: the app stops the mirror and throws its last frame away. Frames are only kept
+    while a streaming app's menus are up and a phone or tv_screen is asking.
+  - Claude's Enter on a screen the helper can't read (YouTube) can't be checked against the block list, the answer says
+    `blind`. The playing back out still applies. tv_stream's description tells Claude to look at tv_screen first.
+- Not yet tested: the other apps' links and pickers, a real PIN pad, and the whole Shell helper on the TV itself.
+  Note each app here once seen.
 
 ## AroFlo session limit
 AroFlo caps how many devices can be signed in as one user. When Ethan signs in elsewhere, the TV gets the User

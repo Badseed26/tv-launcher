@@ -255,7 +255,7 @@ final class RemoteServer {
                 json(out, status());
                 return;
             case "/api/shot":
-                shot(out);
+                shot(out, a);
                 return;
             case "/api/view":
                 json(out, ok(onMain(new Job() {
@@ -479,6 +479,8 @@ final class RemoteServer {
         o.put("on", on.get());
         // a streaming app's in front: the page shows its streaming panel
         o.put("stream", Screen.top == null && Stream.streaming(c, Screen.otherPkg));
+        // how the Shell helper's going, for the streaming panel's note when it's not up
+        if (!Shell.up()) o.put("shell", Shell.state);
         JSONArray days = new JSONArray();
         for (String d : RunnerActivity.days()) days.put(new JSONArray().put(d).put(RunnerActivity.nice(d)));
         o.put("days", days);
@@ -505,16 +507,38 @@ final class RemoteServer {
      * A picture of what's on the TV (20/11): any of our own screens (home, Filer, Runner, all apps). Another app or the
      * TV being off gets a 409 with a line saying so, never a picture.
      */
-    private void shot(OutputStream out) throws Exception {
-        // a streaming app up (22/11): the accessibility helper's picture of the screen, never while a movie's playing
+    private void shot(OutputStream out, Map<String, String> a) throws Exception {
+        // a streaming app up (22/11): its menus show, never while a movie's playing
         String sp = Stream.front(c);
         HomeButtonService hs = HomeButtonService.instance;
+        if (sp == null) Shell.videoOff();
         if (sp != null && hs != null) {
             String n = Screen.appName(c, sp);
             if (Stream.playingNow(c)) {
+                Shell.videoOff();
                 send(out, 409, "text/plain", ("On the TV: " + n + " (playing, no picture while a movie's on)").getBytes(StandardCharsets.UTF_8), null);
                 return;
             }
+            // the live picture off the Shell helper's mirror: a new frame whenever the screen changes. The phone
+            // says which frame it has (after) and waits here for the next one.
+            if (Shell.up()) {
+                long after = 0;
+                try {
+                    after = Long.parseLong(String.valueOf(a.get("after")));
+                } catch (Exception ignored) {
+                }
+                Shell.Frame f = Shell.frame(after, after > 0 ? 1500 : 3000);
+                if (f != null) {
+                    send(out, 200, "image/jpeg", f.jpg, null, "Cache-Control: no-store", "X-Seq: " + f.seq);
+                    return;
+                }
+                if (after > 0) {
+                    // nothing moved on screen: the phone keeps the picture it has
+                    send(out, 204, "text/plain", new byte[0], null, "X-Seq: " + after);
+                    return;
+                }
+            } else Shell.ensure(c);
+            // no helper (debugging not allowed yet): the accessibility helper's slower screenshot
             final CountDownLatch got = new CountDownLatch(1);
             final AtomicReference<byte[]> jpg = new AtomicReference<>();
             hs.shot(new Screen.Shot() {
@@ -853,7 +877,7 @@ final class RemoteServer {
     }
 
     private static void send(OutputStream out, int code, String type, byte[] body, String cookie, String... extra) throws Exception {
-        String reason = code == 200 ? "OK" : code == 303 ? "See Other" : code == 401 ? "Unauthorized" : code == 404 ? "Not Found"
+        String reason = code == 200 ? "OK" : code == 204 ? "No Content" : code == 303 ? "See Other" : code == 401 ? "Unauthorized" : code == 404 ? "Not Found"
                 : code == 409 ? "Conflict" : code == 429 ? "Too Many Requests" : "Error";
         StringBuilder h = new StringBuilder("HTTP/1.1 " + code + " " + reason + "\r\n");
         h.append("Content-Type: ").append(type).append("\r\n");

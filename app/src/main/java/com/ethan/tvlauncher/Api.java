@@ -137,6 +137,7 @@ final class Api {
 
     /** Main thread. Starts the next job if there is one and the TV's free. Called on a new job, every beat, and after each job. */
     static void kick(final Context c) {
+        Shell.idle();
         main.post(new Runnable() {
             @Override
             public void run() {
@@ -621,6 +622,9 @@ final class Api {
                     o.put("safe", Crash.safeMode(c));
                     return o;
                 }
+                case "tv.shell":
+                    // the Shell helper (real keys and the live picture): how it's going, {start:true}, {off:true|false}, {port:n}
+                    return Shell.status(c, a);
                 case "tv.wake": {
                     main.post(new Runnable() {
                         @Override
@@ -634,7 +638,7 @@ final class Api {
                     return o;
                 }
                 default:
-                    return err("unknown tv request " + what + " (tv.ping, tv.queue, tv.cancel, tv.log, tv.shots, tv.safe, tv.wake)");
+                    return err("unknown tv request " + what + " (tv.ping, tv.queue, tv.cancel, tv.log, tv.shots, tv.safe, tv.wake, tv.shell)");
             }
         } catch (Exception e) {
             return err(String.valueOf(e.getMessage()));

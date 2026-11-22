@@ -96,11 +96,30 @@ final class Stream {
                 String why = owner ? null : blocked(deep(n));
                 if (why != null) return look(c, root, o.put("ok", false).put("err", "won't press " + why + " (starts the movie or costs money, that's Ethan's)"));
                 o.put("pressed", deep(n));
-                if (!click(n)) o.put("note", "the app didn't take the press, try focusing it with the arrows then enter");
+                if (!click(n) && !(Shell.ready(c, 4000) && tapNode(c, n))) o.put("note", "the app didn't take the press, move to it with the arrows then enter");
                 return after(c, h, o);
             }
             case "movie.key": {
                 String k = a.optString("key").toLowerCase(Locale.US);
+                if (k.equals("ok")) k = "enter";
+                // real remote keys through the Shell helper when it's up (22/11): YouTube and Netflix ignore the
+                // accessibility presses, and Disney+ only opened its lower rows for a real Down
+                if (k.matches("back|home|enter|up|down|left|right") && Shell.ready(c, 4000)) {
+                    if (k.equals("enter") && !owner) {
+                        AccessibilityNodeInfo f = focused(root);
+                        String label = f == null ? "" : deep(f);
+                        String why = blocked(label);
+                        if (why != null) return look(c, root, o.put("ok", false).put("err", "won't press " + why + " (starts the movie or costs money, that's Ethan's)"));
+                        if (label.isEmpty()) o.put("blind", "this app's screen can't be read, so the TV couldn't check what OK pressed: look at tv_screen");
+                        else o.put("pressed", label);
+                    }
+                    if (Shell.key(k)) {
+                        o.put("key", k);
+                        o.put("how", "remote key");
+                        if (k.equals("home")) return o.put("front", "home screen");
+                        return after(c, h, o);
+                    }
+                }
                 switch (k) {
                     case "back":
                         h.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK);
@@ -144,7 +163,17 @@ final class Stream {
                 if (box == null) {
                     // no box: a number pad on screen (PIN screens), press each digit's button (Ethan, 22/11)
                     String t = a.optString("text");
-                    if (!t.matches("\\d{1,8}")) return look(c, root, o.put("ok", false).put("err", "no text box on screen (open the app's search first)"));
+                    boolean pad = t.matches("\\d{1,8}");
+                    if (pad) for (char ch : t.toCharArray()) {
+                        boolean has = false;
+                        for (AccessibilityNodeInfo x : nodes(root)) if (deep(x).equals(String.valueOf(ch))) { has = true; break; }
+                        if (!has) pad = false;
+                    }
+                    if (!pad) {
+                        // no box and no number pad the helper can read: type it as real key presses
+                        if (Shell.ready(c, 4000) && Shell.text(t)) return after(c, h, o.put("typed", owner && t.matches("\\d+") ? t.length() + " digits" : t).put("how", "remote keys"));
+                        return look(c, root, o.put("ok", false).put("err", "no text box on screen (open the app's search first)"));
+                    }
                     for (char ch : t.toCharArray()) {
                         AccessibilityNodeInfo key = null;
                         for (AccessibilityNodeInfo x : nodes(h.getRootInActiveWindow()))
@@ -159,7 +188,8 @@ final class Stream {
                 Bundle b = new Bundle();
                 b.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, a.optString("text"));
                 box.performAction(AccessibilityNodeInfo.ACTION_FOCUS);
-                if (!box.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, b)) o.put("note", "the box didn't take the text");
+                if (!box.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, b) && !(Shell.ready(c, 4000) && Shell.text(a.optString("text"))))
+                    o.put("note", "the box didn't take the text");
                 return after(c, h, o.put("typed", a.optString("text")));
             }
             default:
@@ -170,6 +200,8 @@ final class Stream {
 
     /** After a press or key: give the app a moment, back out if a movie started, then a fresh look. */
     private static JSONObject after(Context c, HomeButtonService h, JSONObject o) throws Exception {
+        // Ethan's own press off the phone page: he's watching the live picture, no need to wait or read the screen back
+        if (o.optBoolean("owner") && Shell.up()) return o;
         Thread.sleep(o.optBoolean("owner") ? 1200 : 2500);
         AccessibilityNodeInfo root = h.getRootInActiveWindow();
         if (!o.optBoolean("owner") && root != null && playing(c, root)) {
@@ -317,6 +349,19 @@ final class Stream {
 
     /** The streaming app on screen right now (package), or null. */
     static String front(Context c) {
+        // asked several times a second by the live picture: half a second's memory
+        long now = android.os.SystemClock.uptimeMillis();
+        if (now - frontAt < 500) return frontPkg;
+        frontPkg = front0(c);
+        frontAt = android.os.SystemClock.uptimeMillis();
+        return frontPkg;
+    }
+
+    private static volatile long frontAt, playAt;
+    private static volatile String frontPkg;
+    private static volatile boolean playWas;
+
+    private static String front0(Context c) {
         HomeButtonService h = HomeButtonService.instance;
         PowerManager pm = (PowerManager) c.getSystemService(Context.POWER_SERVICE);
         if (h == null || Screen.top != null || (pm != null && !pm.isInteractive())) return null;
@@ -326,8 +371,23 @@ final class Stream {
     }
 
     static boolean playingNow(Context c) {
+        long now = android.os.SystemClock.uptimeMillis();
+        if (now - playAt < 700) return playWas;
         HomeButtonService h = HomeButtonService.instance;
-        return h != null && playing(c, h.getRootInActiveWindow());
+        playWas = h != null && playing(c, h.getRootInActiveWindow());
+        playAt = android.os.SystemClock.uptimeMillis();
+        return playWas;
+    }
+
+    /** A real finger tap in the middle of a thing (when the app won't take the accessibility press). */
+    private static boolean tapNode(Context c, AccessibilityNodeInfo n) {
+        if (!Shell.up()) return false;
+        android.util.DisplayMetrics dm = new android.util.DisplayMetrics();
+        ((android.view.WindowManager) c.getSystemService(Context.WINDOW_SERVICE)).getDefaultDisplay().getRealMetrics(dm);
+        android.graphics.Rect r = new android.graphics.Rect();
+        n.getBoundsInScreen(r);
+        if (r.isEmpty() || dm.widthPixels <= 0) return false;
+        return Shell.tap(r.exactCenterX() / dm.widthPixels, r.exactCenterY() / dm.heightPixels);
     }
 
     /** Ethan's tap on the phone page picture: presses the smallest thing under his finger (fx, fy 0 to 1 across the screen). */
@@ -352,7 +412,9 @@ final class Stream {
                 best = n;
             }
         }
-        return best != null && click(best);
+        if (best != null && click(best)) return true;
+        // nothing readable under it (YouTube and Netflix draw their own screens): a real tap on that spot
+        return Shell.ready(c, 3000) && Shell.tap(fx, fy);
     }
 
     // ---------------------------------------------------------------- bits
