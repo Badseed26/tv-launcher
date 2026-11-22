@@ -26,6 +26,8 @@ import java.util.regex.Pattern;
  *   movie.press {ref | text}       presses one thing
  *   movie.key {key}                back, home, enter, up, down, left, right
  *   movie.type {text}              types into the search box
+ * The phone page's streaming panel (/api/stream, Ethan's own phone only, 22/11) uses the same code as owner: no block
+ * list, works while playing, so Ethan can key a PIN or press Play from his phone.
  * After movie.open the profile picker gets Ethan's profile picked by itself (movie.apps {profile}), then the movie's
  * link goes again (apps drop the link once you pick a profile).
  */
@@ -47,6 +49,11 @@ final class Stream {
     }
 
     static JSONObject run(Context c, String what, JSONObject a) throws Exception {
+        return run(c, what, a, false);
+    }
+
+    /** owner: Ethan on his phone page, not Claude. Nothing blocked and it works while playing. */
+    static JSONObject run(Context c, String what, JSONObject a, boolean owner) throws Exception {
         HomeButtonService h = HomeButtonService.instance;
         if (h == null) return Api.err("the accessibility helper isn't running on the TV");
         PowerManager pm = (PowerManager) c.getSystemService(Context.POWER_SERVICE);
@@ -54,10 +61,13 @@ final class Stream {
         AccessibilityNodeInfo root = h.getRootInActiveWindow();
         String pkg = root == null || root.getPackageName() == null ? "" : root.getPackageName().toString();
         if (!streaming(c, pkg)) return Api.err("there's no streaming app on the TV (it's on " + Screen.name(c) + "), open a movie first");
-        if (playing(c, root)) return Api.err("a movie's playing on " + Screen.appName(c, pkg) + ", so hands off (Ethan's rule)");
+        boolean playingNow = playing(c, root);
+        if (playingNow && !owner) return Api.err("a movie's playing on " + Screen.appName(c, pkg) + ", so hands off (Ethan's rule)");
 
         JSONObject o = new JSONObject();
         o.put("ok", true);
+        if (owner) o.put("playing", playingNow);
+        o.put("owner", owner);
         o.put("app", Screen.appName(c, pkg));
         switch (what) {
             case "movie.look":
@@ -83,7 +93,7 @@ final class Stream {
                     if (hits.size() != 1) return look(c, root, o.put("ok", false).put("err", hits.isEmpty() ? "nothing says " + a.optString("text") : hits.size() + " things say " + a.optString("text") + ", use a ref"));
                     n = hits.get(0);
                 }
-                String why = blocked(deep(n));
+                String why = owner ? null : blocked(deep(n));
                 if (why != null) return look(c, root, o.put("ok", false).put("err", "won't press " + why + " (starts the movie or costs money, that's Ethan's)"));
                 o.put("pressed", deep(n));
                 if (!click(n)) o.put("note", "the app didn't take the press, try focusing it with the arrows then enter");
@@ -104,7 +114,7 @@ final class Stream {
                     case "ok": {
                         AccessibilityNodeInfo f = focused(root);
                         if (f == null) return look(c, root, o.put("ok", false).put("err", "nothing has focus, press by ref"));
-                        String why = blocked(deep(f));
+                        String why = owner ? null : blocked(deep(f));
                         if (why != null) return look(c, root, o.put("ok", false).put("err", "won't press " + why + " (starts the movie or costs money, that's Ethan's)"));
                         o.put("pressed", deep(f));
                         click(f);
@@ -131,7 +141,21 @@ final class Stream {
                 AccessibilityNodeInfo f = focused(root);
                 if (f != null && f.isEditable()) box = f;
                 if (box == null) for (AccessibilityNodeInfo x : nodes(root)) if (x.isEditable()) { box = x; break; }
-                if (box == null) return look(c, root, o.put("ok", false).put("err", "no text box on screen (open the app's search first)"));
+                if (box == null) {
+                    // no box: a number pad on screen (PIN screens), press each digit's button (Ethan, 22/11)
+                    String t = a.optString("text");
+                    if (!t.matches("\\d{1,8}")) return look(c, root, o.put("ok", false).put("err", "no text box on screen (open the app's search first)"));
+                    for (char ch : t.toCharArray()) {
+                        AccessibilityNodeInfo key = null;
+                        for (AccessibilityNodeInfo x : nodes(h.getRootInActiveWindow()))
+                            if (deep(x).equals(String.valueOf(ch))) { key = x; break; }
+                        if (key == null) return after(c, h, o.put("ok", false).put("err", "no box and no " + ch + " button on screen"));
+                        click(key);
+                        Thread.sleep(350);
+                    }
+                    // a PIN never goes in the answer
+                    return after(c, h, o.put("typed", owner ? t.length() + " digits" : t));
+                }
                 Bundle b = new Bundle();
                 b.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, a.optString("text"));
                 box.performAction(AccessibilityNodeInfo.ACTION_FOCUS);
@@ -146,9 +170,9 @@ final class Stream {
 
     /** After a press or key: give the app a moment, back out if a movie started, then a fresh look. */
     private static JSONObject after(Context c, HomeButtonService h, JSONObject o) throws Exception {
-        Thread.sleep(2500);
+        Thread.sleep(o.optBoolean("owner") ? 1200 : 2500);
         AccessibilityNodeInfo root = h.getRootInActiveWindow();
-        if (root != null && playing(c, root)) {
+        if (!o.optBoolean("owner") && root != null && playing(c, root)) {
             h.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK);
             o.put("backedOut", "that started the movie playing, so it pressed Back (playing is Ethan's)");
             Thread.sleep(2000);
@@ -173,6 +197,15 @@ final class Stream {
             l.add(n);
             all.append(t.toLowerCase(Locale.US)).append('\n');
             if (lines.length() < 90) {
+                if (o.optBoolean("owner")) {
+                    // the phone page draws its own list
+                    JSONObject it = new JSONObject().put("ref", l.size()).put("t", t.isEmpty() ? "[no label]" : t);
+                    if (n.isFocused() || n.isAccessibilityFocused()) it.put("focus", true);
+                    if (n.isSelected()) it.put("sel", true);
+                    if (n.isEditable()) it.put("box", true);
+                    lines.put(it);
+                    continue;
+                }
                 String flags = (n.isFocused() || n.isAccessibilityFocused() ? " (focused)" : "") + (n.isSelected() ? " (selected)" : "")
                         + (n.isEditable() ? " (text box)" : "") + (blocked(t) != null ? " (won't press)" : "");
                 lines.put(l.size() + ": " + (t.isEmpty() ? "[no label]" : t) + flags);

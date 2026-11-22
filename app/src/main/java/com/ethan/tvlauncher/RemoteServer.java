@@ -322,6 +322,20 @@ final class RemoteServer {
             case "/api/cmd":
                 json(out, cmd(String.valueOf(a.get("c"))));
                 return;
+            case "/api/stream": {
+                // Ethan's streaming panel (22/11): see and drive Netflix, Disney+ and co from his phone, PINs included.
+                // Not on the relay's list (LINK_OK): Claude has movie.look/press with its own blocks instead.
+                if (viaLink) {
+                    send(out, 403, "text/plain", "Not from the relay".getBytes(StandardCharsets.UTF_8), null);
+                    return;
+                }
+                JSONObject args = new JSONObject();
+                for (String k : new String[]{"ref", "text", "key"}) if (a.get(k) != null) args.put(k, k.equals("ref") ? Integer.parseInt(a.get(k)) : a.get(k));
+                String d = method.equals("POST") ? String.valueOf(a.get("do")) : "look";
+                if (!d.matches("look|press|key|type")) d = "look";
+                json(out, Stream.run(c, "movie." + d, args, true));
+                return;
+            }
             case "/api/signin":
                 // Ethan's Sign in to site for the Tradies Web booking open on the TV (22/11). POST starts it, GET says how it went.
                 // Not on the relay's list (LINK_OK), so only Ethan's phone can start it.
@@ -458,6 +472,8 @@ final class RemoteServer {
             }
         });
         o.put("on", on.get());
+        // a streaming app's in front: the page shows its streaming panel
+        o.put("stream", Screen.top == null && Stream.streaming(c, Screen.otherPkg));
         JSONArray days = new JSONArray();
         for (String d : RunnerActivity.days()) days.put(new JSONArray().put(d).put(RunnerActivity.nice(d)));
         o.put("days", days);
