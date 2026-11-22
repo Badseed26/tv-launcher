@@ -295,6 +295,7 @@ final class Shell {
             case "home": code = 3; break;
             case "delete": code = 67; break;
             case "playpause": code = 85; break;
+            case "sleep": code = 223; break;
             default: return false;
         }
         return send("key " + code);

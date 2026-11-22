@@ -325,6 +325,11 @@ final class RemoteServer {
                 })));
                 return;
             case "/api/cmd":
+                // TV off is Ethan's button, not one of Claude's tools
+                if (viaLink && "off".equals(a.get("c"))) {
+                    json(out, ok(false));
+                    return;
+                }
                 json(out, cmd(String.valueOf(a.get("c"))));
                 return;
             case "/api/stream": {
@@ -703,6 +708,27 @@ final class RemoteServer {
                 });
                 note = on ? "TV's already on." : "Turning the TV on, give it a few seconds.";
                 break;
+            case "off": { // the TV off button (Ethan, 22/11): standby, like the power button on the TV's own remote
+                android.os.PowerManager pw = (android.os.PowerManager) c.getSystemService(Context.POWER_SERVICE);
+                if (pw != null && !pw.isInteractive()) {
+                    note = "TV's already off.";
+                    break;
+                }
+                main.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        HomeButtonService hb = HomeButtonService.instance;
+                        boolean ok = hb != null && android.os.Build.VERSION.SDK_INT >= 28
+                                && hb.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_LOCK_SCREEN);
+                        // the helper wouldn't: the real sleep key through the Shell helper
+                        if (!ok) ok = Shell.up() && Shell.key("sleep");
+                        TvLog.line(c, ok ? "Phone remote: TV off" : "Phone remote: couldn't turn the TV off");
+                        if (!ok) note = "Couldn't turn the TV off from here.";
+                    }
+                });
+                note = "Turning the TV off.";
+                break;
+            }
             case "update":
                 note = "Checking for an update...";
                 Updater.remoteUpdate(c, new Remote.Say() {
