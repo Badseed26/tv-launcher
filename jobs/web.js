@@ -309,6 +309,9 @@ ec.run(async function () {
     var o = { ok: true };
     for (var k in (extra || {})) o[k] = extra[k];
     if (A.look !== false) o.look = look({ find: A.find, chars: A.chars || 1200, max: A.max });
+    // Tradies Web waiting on the site sign in (22/11): that's Ethan's, from the phone page's Sign in to site
+    if (/tradies\.ambrosebuilding/i.test(location.host) && /currently not signed in|sign in again|READ PSEA/i.test(document.body ? document.body.textContent : ''))
+      o.signin = 'Needs the site sign in. Tell Ethan to hit Sign in to site on the phone remote page, then carry on. Never press or fill it yourself.';
     T.all = Date.now() - T0; o.t = T;
     return o;
   };

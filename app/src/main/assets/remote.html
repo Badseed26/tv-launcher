@@ -34,6 +34,10 @@ input{min-width:0;border:1px solid var(--line);background:rgba(0,0,0,.25);color:
 input:focus{border-color:var(--blue)}
 h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--mute);margin:18px 2px 0;font-weight:600}
 .small{font-size:12px;color:var(--mute);margin:8px 2px 0}
+.fold{display:flex;align-items:center;justify-content:space-between;width:100%;border:0;background:transparent;color:var(--mute);padding:0;margin:18px 2px 0;font:600 12px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;text-transform:uppercase;letter-spacing:.08em}
+.fold .chev{display:inline-block;width:22px;height:22px;line-height:22px;text-align:center;border-radius:50%;background:var(--card);border:1px solid var(--line);transition:transform .2s;font-size:13px;color:var(--text)}
+.fold.shut .chev{transform:rotate(-90deg)}
+.sigpad{display:block;width:100%;aspect-ratio:5/2;margin-top:10px;border-radius:12px;background:#fff;touch-action:none;border:1px solid var(--line)}
 </style></head><body>
 <header><h1>TV Filer</h1><div class="chips" id="chips"></div></header>
 <div class="note" id="note"></div>
@@ -52,6 +56,15 @@ h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--mute
 <h2>Runner</h2>
 <div class="row"><select id="day"></select><button class="btn primary" id="pull" style="flex:0 0 110px">Pull inbox</button></div>
 <p class="small" id="runner">Reads the day's Inbox and Sent Items (read only, unread put back) plus the next 5 weeks of AroFlo bookings, and drops the bundle on the TV remote task for the inbox check. The Filer closes while it runs and reopens after.</p>
+<button class="fold" id="sfold"><span>Site sign in (Tradies Web)</span><span class="chev">&#9662;</span></button>
+<div id="sbody">
+<div class="row"><button class="btn primary" id="signin">Sign in to site</button></div>
+<p class="small" id="sstat">For the booking Claude has open on the TV. Answers the PSEA, signs with your saved signature and signs in. Only this button starts it.</p>
+<p class="small">Your signature: <b id="sigsaved">checking...</b></p>
+<canvas class="sigpad" id="sigpad"></canvas>
+<div class="row"><button class="btn" id="sigclear">Clear</button><button class="btn primary" id="sigsave">Save signature</button></div>
+<p class="small">Sign the white box once with your finger, then Save. The TV keeps it and uses it every time you hit Sign in to site.</p>
+</div>
 <h2>Saved logins</h2>
 <div id="logins" class="small">Loading...</div>
 <div class="row"><select id="lsite"></select></div>
@@ -138,6 +151,43 @@ $('lsave').onclick=function(){
   var p=$('lpass').value;if(!p){$('note').textContent='Put the password in first.';return;}
   post('/api/logins',{site:$('lsite').value,user:$('luser').value,pass:p}).then(function(o){$('lpass').value='';$('luser').value='';$('note').textContent=o.ok?'Saved on the TV.':(o.msg||'Didn\'t save');logins(o);});
 };
+// Site sign in (22/11): fold it away with the chevron, remembered on this phone
+function fold(shut){$('sbody').hidden=shut;$('sfold').classList.toggle('shut',shut);try{localStorage.setItem('ecSignFold',shut?'1':'0');}catch(e){}if(!shut)sizePad();}
+$('sfold').onclick=function(){fold(!$('sbody').hidden);};
+var pad=$('sigpad'),strokes=[],curS=null;
+function sizePad(){var r=pad.getBoundingClientRect(),k=window.devicePixelRatio||1;if(!r.width)return;pad.width=Math.round(r.width*k);pad.height=Math.round(r.height*k);drawPad();}
+function drawPad(){var g=pad.getContext('2d'),w=pad.width,h=pad.height;g.fillStyle='#fff';g.fillRect(0,0,w,h);g.strokeStyle='#111';g.lineWidth=Math.max(2,w/220);g.lineCap='round';g.lineJoin='round';strokes.forEach(function(st){g.beginPath();st.forEach(function(p,i){var x=p[0]*w,y=p[1]*h;if(i)g.lineTo(x,y);else g.moveTo(x,y);});g.stroke();});}
+function ptOf(e){var r=pad.getBoundingClientRect();return [Math.min(1,Math.max(0,(e.clientX-r.left)/r.width)),Math.min(1,Math.max(0,(e.clientY-r.top)/r.height))];}
+pad.addEventListener('pointerdown',function(e){e.preventDefault();pad.setPointerCapture(e.pointerId);curS=[ptOf(e)];strokes.push(curS);drawPad();});
+pad.addEventListener('pointermove',function(e){if(!curS)return;e.preventDefault();curS.push(ptOf(e));drawPad();});
+pad.addEventListener('pointerup',function(){curS=null;});
+pad.addEventListener('pointercancel',function(){curS=null;});
+function thinS(s,max){if(s.length<=max)return s;var k=Math.ceil(s.length/max),o=s.filter(function(p,i){return i%k===0;});o.push(s[s.length-1]);return o;}
+$('sigclear').onclick=function(){strokes=[];drawPad();};
+$('sigsave').onclick=function(){
+  var use=strokes.filter(function(s){return s.length>1;}).slice(0,30).map(function(s){return thinS(s,60).map(function(p){return [Math.round(p[0]*1000)/1000,Math.round(p[1]*1000)/1000];});});
+  if(!use.length){$('note').textContent='Sign the white box first.';return;}
+  post('/api/signature',{strokes:JSON.stringify(use)}).then(function(o){$('note').textContent=o.ok?'Signature saved on the TV.':(o.msg||'Didn\'t save');sigState(o);if(o.ok){strokes=[];drawPad();}});
+};
+function sigState(o){if(o&&'saved' in o)$('sigsaved').innerHTML=o.saved?'<span style="color:var(--good)">saved</span> <button class="btn" style="padding:4px 10px;margin-left:6px" id="sigdel">Clear saved</button>':'<span style="color:var(--warn)">not saved yet</span>';var d=$('sigdel');if(d)d.onclick=function(){if(!confirm('Clear your saved signature on the TV?'))return;post('/api/signature',{'do':'clear'}).then(sigState);};}
+fetch('/api/signature',{cache:'no-store'}).then(function(r){return r.json();}).then(sigState).catch(function(){});
+var sPoll=null;
+function signLook(n){
+  fetch('/api/signin',{cache:'no-store'}).then(function(r){return r.json();}).then(function(o){
+    var res=String(o.res||'');
+    if(o.ok===false&&o.msg){$('sstat').textContent=o.msg;return;}
+    if(o.busy||res=='going'){$('sstat').textContent='Signing in...';if(n<60)sPoll=setTimeout(function(){signLook(n+1);},3000);return;}
+    $('sstat').textContent=res?(/^stopped:/.test(res)?res.replace(/^stopped: /,'Stopped: '):res):'Nothing yet';
+    setTimeout(shot,300);
+  }).catch(function(){});
+}
+$('signin').onclick=function(){
+  if(!confirm('Sign in to site on the booking open on the TV? It answers the PSEA and signs with your saved signature.'))return;
+  clearTimeout(sPoll);$('sstat').textContent='Starting...';
+  post('/api/signin').then(function(o){$('sstat').textContent=o.msg||'';if(o.ok)sPoll=setTimeout(function(){signLook(0);},3000);});
+};
+try{fold(localStorage.getItem('ecSignFold')==='1');}catch(e){fold(false);}
+window.addEventListener('resize',function(){if(!$('sbody').hidden)sizePad();});
 document.addEventListener('visibilitychange',function(){if(!document.hidden){status();shot();}});
 status();setInterval(function(){if(!document.hidden)status();},3000);
 // 20/11: watch the TV from the start without changing what it shows

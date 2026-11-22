@@ -59,6 +59,8 @@ public class RunnerActivity extends Activity {
             "https://raw.githubusercontent.com/Badseed26/ec-userscripts/main/src/ec-inbox-pull.js";
     private static final String SUP_URL =
             "https://raw.githubusercontent.com/Badseed26/ec-userscripts/main/src/aroflo-supplier-items.js";
+    private static final String TQF_URL =
+            "https://raw.githubusercontent.com/Badseed26/ec-userscripts/main/src/tradies-quick-fill.js";
     // 20/11: the AroFlo side (calendar and lookups) loads from GitHub like the Inbox Pull, so a fix to it is live on the
     // next run without a new build. The copy built into the app is the fallback.
     private static final String AF_URL =
@@ -1100,7 +1102,7 @@ public class RunnerActivity extends Activity {
             "(?i)(siteadmin|site_admin|/admin/|/administration|usermanagement|/settings/)");
     private static final String JOBS_RAW = "https://raw.githubusercontent.com/Badseed26/tv-launcher/";
     private Job carry;
-    private String apiJs, apiState, apiHook, supJs, pageUa;
+    private String apiJs, apiState, apiHook, supJs, tqfJs, pageUa;
     private final java.util.List<String[]> apiFiles = new java.util.ArrayList<>();
     private final StringBuilder apiLog = new StringBuilder();
     private int apiShots, apiRuns;
@@ -1138,6 +1140,8 @@ public class RunnerActivity extends Activity {
                 apiHook = null;
                 // web.sup: the AroFlo supplier items script goes on the quote page too (22/11)
                 if ("web.sup".equals(what)) supJs = loadSup();
+                // web jobs: Ethan's Tradies quick fill goes on Tradies Web pages, so the phone page's Sign in to site works (22/11)
+                if ("web".equals(area)) tqfJs = loadTqf();
                 if ("outlook".equals(area)) {
                     try {
                         apiHook = jobFile("jobs/outlook-hook.js", req.optString("branch", "main"));
@@ -1298,7 +1302,123 @@ public class RunnerActivity extends Activity {
         // web.sup: Ethan's supplier items script on the quote page, in the Tampermonkey stand-in (once a page)
         if ("web.sup".equals(job.api.optString("do")) && supJs != null && u.startsWith("https://office.aroflo.com/"))
             web.evaluateJavascript(shimJs.replace("__TOKEN__", token).replace("__VER__", versionOf(supJs)).replace("__SCRIPT__", supJs), null);
+        if (tqfJs != null && u.startsWith("https://tradies.ambrosebuilding.com.au/")) web.evaluateJavascript(tqfInject(), null);
         web.evaluateJavascript(apiJs.replace("__TOKEN__", token).replace("__JOB__", jj.toString()), null);
+    }
+
+    /** The Tradies quick fill in the Tampermonkey stand-in, with app timed waits when the job code hasn't set them up. */
+    private String tqfInject() {
+        String sleep = "if(!window.__ecSleep&&window.ecApi&&window.ecApi.wake){(function(){var w={},n=0;"
+                + "window.__ecWake=function(id){var f=w[id];if(f){delete w[id];f();}};"
+                + "window.__ecSleep=function(ms){return new Promise(function(r){var id='t'+(++n);w[id]=r;"
+                + "try{window.ecApi.wake('" + token + "',id,Math.round(ms)||0);}catch(e){delete w[id];setTimeout(r,ms);}});};})();}\n";
+        return sleep + shimJs.replace("__TOKEN__", token).replace("__VER__", versionOf(tqfJs)).replace("__SCRIPT__", tqfJs);
+    }
+
+    /** Newest Tradies quick fill from GitHub (kept on the TV), or the last good copy. */
+    private String loadTqf() {
+        File cache = new File(getFilesDir(), "tradies-quick-fill.js");
+        try {
+            String src = fresh("ec-userscripts", "src/tradies-quick-fill.js", TQF_URL);
+            if (src.contains("==UserScript==")) {
+                FileWriter w = new FileWriter(cache, false);
+                w.write(src);
+                w.close();
+                return src;
+            }
+        } catch (Exception ignored) {
+        }
+        try {
+            if (cache.exists()) return read(new java.io.FileInputStream(cache));
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    /** True when the Runner's page is on Tradies Web. Main thread. */
+    boolean onTradies() {
+        return web != null && String.valueOf(web.getUrl()).startsWith("https://tradies.ambrosebuilding.com.au/");
+    }
+
+    /**
+     * The phone page's Sign in to site (22/11). Ethan presses it himself: it's his PSEA and his signature, so nothing
+     * else on the TV starts it (the relay link can't reach it, and web jobs never press on the safety pages).
+     * start=false just reads how the last one went. Runs off the main thread, waits up to 20 s for the page.
+     */
+    static String tradiesSignIn(final boolean start) {
+        final RunnerActivity r = instance;
+        if (r == null) return "{\"ok\":false,\"msg\":\"The Runner isn't open. Ask Claude to open the booking on Tradies Web first.\"}";
+        if (start && r.tqfJs == null) r.tqfJs = r.loadTqf();
+        final java.util.concurrent.CountDownLatch done = new java.util.concurrent.CountDownLatch(1);
+        final java.util.concurrent.atomic.AtomicReference<String> out = new java.util.concurrent.atomic.AtomicReference<>();
+        final String go = "(function(){if(!/^tradies\\.ambrosebuilding\\.com\\.au$/.test(location.host))return 'not on Tradies Web';"
+                + "if(!window.__ecTqf)return 'noscript';if(window.__ecTqfBusy)return 'already going';"
+                + "window.__ecTqfBusy=true;window.__ecTqfRes='going';"
+                + "window.__ecTqf.signIn().then(function(m){window.__ecTqfRes=m;window.__ecTqfBusy=false;});return 'started';})()";
+        final String look = "(function(){return JSON.stringify({res:window.__ecTqfRes||'',busy:!!window.__ecTqfBusy,"
+                + "sig:!!(window.__ecTqf&&window.__ecTqf.hasSig()),page:location.host+location.pathname});})()";
+        r.handler.post(new Runnable() {
+            @Override
+            public void run() {
+                if (!r.alive || !r.onTradies()) {
+                    out.set("{\"ok\":false,\"msg\":\"The TV isn't on a Tradies Web page. Ask Claude to open the booking first.\"}");
+                    done.countDown();
+                    return;
+                }
+                if (r.tabOpen) {
+                    // Ethan's on it: keep the tab open a good while longer
+                    r.handler.removeCallbacks(r.tabClose);
+                    r.handler.postDelayed(r.tabClose, 15 * 60000L);
+                }
+                if (!start) {
+                    r.web.evaluateJavascript(look, new android.webkit.ValueCallback<String>() {
+                        @Override
+                        public void onReceiveValue(String v) {
+                            out.set(v);
+                            done.countDown();
+                        }
+                    });
+                    return;
+                }
+                r.web.evaluateJavascript(go, new android.webkit.ValueCallback<String>() {
+                    @Override
+                    public void onReceiveValue(String v) {
+                        if (v != null && v.contains("noscript") && r.tqfJs != null) {
+                            r.web.evaluateJavascript(r.tqfInject(), null);
+                            r.web.evaluateJavascript(go, new android.webkit.ValueCallback<String>() {
+                                @Override
+                                public void onReceiveValue(String v2) {
+                                    out.set(v2);
+                                    done.countDown();
+                                }
+                            });
+                            return;
+                        }
+                        out.set(v);
+                        done.countDown();
+                    }
+                });
+            }
+        });
+        try {
+            done.await(20, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (InterruptedException ignored) {
+        }
+        String v = out.get();
+        if (v == null) return "{\"ok\":false,\"msg\":\"The page didn't answer, try again\"}";
+        if (v.startsWith("{")) return v;
+        try {
+            // evaluateJavascript hands back a JSON string: unwrap it
+            Object o = new org.json.JSONTokener(v).nextValue();
+            String s = String.valueOf(o);
+            if (!start) return s;
+            JSONObject res = new JSONObject();
+            res.put("ok", "started".equals(s) || "already going".equals(s));
+            res.put("msg", "started".equals(s) ? "Signing in, give it a minute" : "noscript".equals(s) ? "The sign-in script didn't load on the page" : s);
+            return res.toString();
+        } catch (Exception e) {
+            return "{\"ok\":false,\"msg\":\"odd answer from the page\"}";
+        }
     }
 
     private final Runnable apiTimeout = new Runnable() {

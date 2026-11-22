@@ -241,6 +241,12 @@ final class RemoteServer {
             else send(out, 200, "text/html; charset=utf-8", asset("remote-login.html"), null);
             return;
         }
+        // Claude through the relay never taps, types or presses keys on Tradies Web: the site sign in there is Ethan's (22/11)
+        final boolean viaLink = Boolean.TRUE.equals(trusted.get());
+        if (viaLink && (path.equals("/api/tap") || path.equals("/api/type") || path.equals("/api/key")) && runnerOnTradies()) {
+            json(out, ok(false));
+            return;
+        }
         switch (path) {
             case "/":
                 send(out, 200, "text/html; charset=utf-8", asset("remote.html"), null);
@@ -316,6 +322,46 @@ final class RemoteServer {
             case "/api/cmd":
                 json(out, cmd(String.valueOf(a.get("c"))));
                 return;
+            case "/api/signin":
+                // Ethan's Sign in to site for the Tradies Web booking open on the TV (22/11). POST starts it, GET says how it went.
+                // Not on the relay's list (LINK_OK), so only Ethan's phone can start it.
+                if (viaLink) {
+                    send(out, 403, "text/plain", "Not from the relay".getBytes(StandardCharsets.UTF_8), null);
+                    return;
+                }
+                if (method.equals("POST")) TvLog.line(c, "Phone remote: Ethan pressed Sign in to site");
+                send(out, 200, "application/json", RunnerActivity.tradiesSignIn(method.equals("POST")).getBytes(StandardCharsets.UTF_8), null);
+                return;
+            case "/api/signature": {
+                // Ethan's signature for the site sign in, drawn once on the phone page and kept where the Tradies quick fill
+                // looks for it (GM value ecSignature: strokes of [x, y] points from 0 to 1). Never sent anywhere else.
+                if (viaLink) {
+                    send(out, 403, "text/plain", "Not from the relay".getBytes(StandardCharsets.UTF_8), null);
+                    return;
+                }
+                GmStore gs = GmStore.get(c);
+                JSONObject o = new JSONObject();
+                if (method.equals("POST")) {
+                    if ("clear".equals(a.get("do"))) {
+                        gs.delete("ecSignature");
+                        TvLog.line(c, "Phone remote: cleared the saved signature");
+                        o.put("ok", true);
+                    } else {
+                        String strokes = cleanStrokes(a.get("strokes"));
+                        if (strokes == null) {
+                            o.put("ok", false);
+                            o.put("msg", "That signature didn't come through right, try again");
+                        } else {
+                            gs.setJson("ecSignature", JSONObject.quote(strokes));
+                            TvLog.line(c, "Phone remote: saved a signature for the site sign in");
+                            o.put("ok", true);
+                        }
+                    }
+                }
+                o.put("saved", gs.getJson("ecSignature") != null);
+                json(out, o);
+                return;
+            }
             case "/api/logins": {
                 // Saved logins for Claude's jobs on the TV (21/11). Only ever says which are saved, never the login.
                 JSONObject o = new JSONObject();
@@ -347,6 +393,53 @@ final class RemoteServer {
             default:
                 send(out, 404, "text/plain", "Not here".getBytes(StandardCharsets.UTF_8), null);
         }
+    }
+
+    /** Strokes from the phone's signature pad, checked and rounded: 1 to 30 strokes of 2 to 400 points from 0 to 1. */
+    private static String cleanStrokes(String raw) {
+        try {
+            org.json.JSONArray in = new org.json.JSONArray(raw), outA = new org.json.JSONArray();
+            if (in.length() < 1 || in.length() > 30) return null;
+            for (int i = 0; i < in.length(); i++) {
+                org.json.JSONArray st = in.getJSONArray(i), so = new org.json.JSONArray();
+                if (st.length() < 2 || st.length() > 400) continue;
+                for (int k = 0; k < st.length(); k++) {
+                    org.json.JSONArray pt = st.getJSONArray(k);
+                    double x = pt.getDouble(0), y = pt.getDouble(1);
+                    if (x < 0 || x > 1 || y < 0 || y > 1) return null;
+                    so.put(new org.json.JSONArray().put(Math.round(x * 10000) / 10000.0).put(Math.round(y * 10000) / 10000.0));
+                }
+                outA.put(so);
+            }
+            return outA.length() > 0 ? outA.toString() : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** Is the Runner up front on a Tradies Web page? Asks on the main thread, 3 s tops. */
+    private static boolean runnerOnTradies() {
+        final RunnerActivity r = RunnerActivity.instance;
+        if (r == null) return false;
+        final java.util.concurrent.CountDownLatch d = new java.util.concurrent.CountDownLatch(1);
+        final java.util.concurrent.atomic.AtomicBoolean on = new java.util.concurrent.atomic.AtomicBoolean(true);
+        new android.os.Handler(android.os.Looper.getMainLooper()).post(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    on.set(r.onTradies());
+                } finally {
+                    d.countDown();
+                }
+            }
+        });
+        try {
+            // can't tell in time: treat it as on Tradies, so a tap never slips through
+            if (!d.await(3, java.util.concurrent.TimeUnit.SECONDS)) return true;
+        } catch (InterruptedException e) {
+            return true;
+        }
+        return on.get();
     }
 
     // ---------------------------------------------------------------- what the page asks for

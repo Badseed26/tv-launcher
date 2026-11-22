@@ -184,6 +184,15 @@ Ethan wants everything doable from a chat with the PC off, using the TV as the c
   web.js refuses presses and fills there, and sign on, sign off, acknowledge, attendance and clock in or out are on
   the press block list. (22/11: the old landing-page rule tried to press that page's SIGN IN; it was covered, so nothing
   happened. The LOG IN rule is now Ambrose admin's front page only.)
+- Site sign in from the phone (22/11, build 96 on, Ethan's call). Ambrose reports need the booking's site sign in (PSEA plus
+  his signature) first. That stays Ethan's: web jobs still never press or fill the safety pages, and the relay can't tap,
+  type or press keys on any Tradies Web page (RemoteServer, `runnerOnTradies`). Web jobs put Ethan's Tradies quick fill
+  (ec-userscripts src/tradies-quick-fill.js, 1.11 on) on every Tradies Web page in the Tampermonkey stand-in, with app
+  timed waits. On the TV it shows no buttons, it only offers `window.__ecTqf`. The phone page's "Site sign in" card (folds
+  away with its chevron) has Sign in to site (`/api/signin`, POST starts, GET reads how it went) and a signature pad that
+  saves his strokes to the GM value `ecSignature` (`/api/signature`), where the script reads them. Neither path is on the
+  relay's list. A web job's answer carries `signin` when the page is waiting on it: tell Ethan to hit Sign in to site, wait,
+  then carry on with the report.
 - `web.steps {steps:[{do:'press',ref:4},{do:'fill',fields:[...]},{do:'wait',text:'Saved'}]}` runs several actions in one
   request (look, press, fill, key, scroll, wait, sleep, shot), carrying on after a page change, stopping at the first
   failure with a look. Use it whenever the next few steps are known, it saves a round trip each.
