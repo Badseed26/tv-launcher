@@ -379,6 +379,11 @@ Ethan asks a chat "find <movie>" and Claude uses `tv_movie` (relay) or `tv_job` 
   picker's gone, and has one more go with a real OK or tap when the app ignores the first press (iview did: 8 s stuck
   on "Who's Watching?" while the answer said "picked Eden"). That call took 11.6 s on the TV; the call before it never
   reached the TV at all (nothing in tv.log), so a hang before the TV sees a movie call is the relay or the connector.
+- 23/11 on build 108: the iview show link works (`how`: the movie's web link), landing on normal Bluey's page (Resume
+  focused, nothing playing). But the profile pick still didn't take: the answer said "picked Eden" in 11 s and iview was
+  still on "Who's Watching?". A tv_stream press on the same tile (ref "Eden, Jeremy Buttons...") worked first go. Likely
+  the picker flickers off between the pick and the link going again, so afterOpen thinks it's past it, sends the link,
+  and the link brings the picker back. To look at: after sending the link again, keep watching a few seconds and pick again.
 - Not yet tested: Paramount+'s show page link, Netflix (links, picker, whether it can be read), a real PIN pad.
   Note each app here once seen.
 
