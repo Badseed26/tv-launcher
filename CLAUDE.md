@@ -371,6 +371,14 @@ Ethan asks a chat "find <movie>" and Claude uses `tv_movie` (relay) or `tv_job` 
     5 s from cold (link up, then 3 s for app_process), and `Stream.playing` only waited 4 s before falling back to the
     old guess. 107 waits 12 s, gives the mirror 6 s, starts the helper as soon as movie.open launches an app, and the
     black test is 90% (YouTube's dark pages read about 40 to 60% black).
+- 23/11, build after 107 (Bluey on iview for Eden): JustWatch's iview link was `iview://video/<id>`, an episode of
+  "Bluey's Auslan Sign & Seek", and after the profile pick it started playing. Now: any TV link with /play, /watch,
+  /video or /episode is dropped, iview never uses JustWatch's links and goes to `iview.abc.net.au/show/<title slug>`
+  (untested whether the iview TV app follows it, else it's app only and Claude searches), and if the app is playing
+  once opened the TV presses Back (`backedOut`). The profile pick looks every 0.5 s, sends the link again as soon as the
+  picker's gone, and has one more go with a real OK or tap when the app ignores the first press (iview did: 8 s stuck
+  on "Who's Watching?" while the answer said "picked Eden"). That call took 11.6 s on the TV; the call before it never
+  reached the TV at all (nothing in tv.log), so a hang before the TV sees a movie call is the relay or the connector.
 - Not yet tested: Paramount+'s show page link, Netflix (links, picker, whether it can be read), a real PIN pad.
   Note each app here once seen.
 

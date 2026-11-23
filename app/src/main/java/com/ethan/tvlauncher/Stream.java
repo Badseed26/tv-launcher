@@ -258,54 +258,67 @@ final class Stream {
 
     // ---------------------------------------------------------------- the profile picker after movie.open
 
-    /** Up to 25 s after the app opens: on a profile picker, pick Ethan's profile and send the movie's link again. */
+    /**
+     * Up to 25 s after the app opens: on a profile picker, pick Ethan's profile and send the movie's link again.
+     * 23/11 (Ethan: "what's taking so long"): looks every half second instead of every second, sends the link again as
+     * soon as the picker's gone instead of a flat 3.5 s, and if the app ignores the pick (iview took the press but
+     * stayed on "Who's Watching?" for 8 s) has one more go with a real OK or tap.
+     */
     static void afterOpen(Context c, String pkg, String appName, String asked, Runnable again, JSONObject o) {
         HomeButtonService h = HomeButtonService.instance;
         if (h == null) return;
-        long until = System.currentTimeMillis() + 25000;
-        boolean picked = false;
+        long until = System.currentTimeMillis() + 25000, pickedAt = 0;
+        boolean picked = false, retried = false;
         int settled = 0;
+        // who Ethan said to watch as this time, else his saved profile (Ethan, 22/11)
+        String want = asked != null && !asked.trim().isEmpty() ? asked.trim() : profileFor(c, appName);
         try {
             while (System.currentTimeMillis() < until) {
-                Thread.sleep(1000);
+                Thread.sleep(500);
                 AccessibilityNodeInfo root = root(h);
                 if (root == null || root.getPackageName() == null || !pkg.equals(root.getPackageName().toString())) continue;
                 List<AccessibilityNodeInfo> all = nodes(root);
                 StringBuilder text = new StringBuilder();
                 for (AccessibilityNodeInfo n : all) text.append(deep(n).toLowerCase(Locale.US)).append('\n');
                 if (!PROFILE_SCREEN.matcher(norm(text.toString())).find()) {
-                    if (picked) return; // past it
-                    // a few seconds of a real menu and no picker: it went straight in
-                    if (all.size() > 5 && ++settled >= 4) return;
+                    if (picked) {
+                        // past it: the link again, apps drop it once you pick a profile
+                        Thread.sleep(1000);
+                        again.run();
+                        return;
+                    }
+                    // about 3 s of a real menu and no picker: it went straight in
+                    if (all.size() > 5 && ++settled >= 6) return;
                     continue;
                 }
-                if (picked) continue; // still loading after the pick
+                if (picked) {
+                    if (!retried && System.currentTimeMillis() - pickedAt > 2500) {
+                        retried = true;
+                        AccessibilityNodeInfo hit = profileNode(all, want);
+                        if (hit != null && pressReal(c, hit)) {
+                            pickedAt = System.currentTimeMillis();
+                            TvLog.line(c, "Movies: " + appName + " ignored the profile pick, pressed it again");
+                        }
+                    }
+                    // still reads as a picker 3 s after the second go: could be a "Switch profile" button on the app's
+                    // own menu, so send the link anyway (the old way did after 3.5 s)
+                    if (retried && System.currentTimeMillis() - pickedAt > 3000) {
+                        again.run();
+                        return;
+                    }
+                    continue; // still loading after the pick
+                }
                 JSONArray names = new JSONArray();
                 for (AccessibilityNodeInfo n : all) {
                     String t = deep(n);
                     if (!t.isEmpty() && t.length() < 40 && !PROFILE_SCREEN.matcher(norm(t.toLowerCase(Locale.US))).find()) names.put(t);
                 }
-                // who Ethan said to watch as this time, else his saved profile (Ethan, 22/11)
-                String want = asked != null && !asked.trim().isEmpty() ? asked.trim() : profileFor(c, appName);
                 if (want.isEmpty()) {
                     o.put("profilePicker", "it's on the profile picker and Ethan's profile isn't set (movie.apps {profile}). On screen: " + names);
                     return;
                 }
-                AccessibilityNodeInfo hit = null;
-                boolean pinned = false;
-                for (AccessibilityNodeInfo n : all) {
-                    String t = norm(deep(n).toLowerCase(Locale.US));
-                    if (isProfile(t, want)) {
-                        // a PIN locked profile is Ethan's to open (Disney+ says "Access Nat's pin protected profile")
-                        if (t.contains("pin")) {
-                            pinned = true;
-                            continue;
-                        }
-                        hit = n;
-                        break;
-                    }
-                }
-                if (hit == null && pinned) {
+                AccessibilityNodeInfo hit = profileNode(all, want);
+                if (hit == null && pinned(all, want)) {
                     o.put("profilePicker", want + "'s profile has a PIN, so it stopped on the picker: that one's Ethan's to open");
                     return;
                 }
@@ -319,14 +332,51 @@ final class Stream {
                     return;
                 }
                 picked = true;
+                pickedAt = System.currentTimeMillis();
                 o.put("profile", "picked " + want);
                 TvLog.line(c, "Movies: picked profile " + want + " on " + appName);
-                Thread.sleep(3500);
-                again.run(); // the movie's link again, apps drop it once you pick a profile
-                until = System.currentTimeMillis() + 8000;
+                until = System.currentTimeMillis() + 10000;
             }
+            // timed up still on the picker after picking: say so rather than "picked"
+            if (picked) o.put("profilePicker", "pressed " + want + " but the app stayed on the picker: press it with tv_stream, then open again");
         } catch (Exception ignored) {
         }
+    }
+
+    /** The profile tile for want, skipping PIN locked ones (Ethan's to open). */
+    private static AccessibilityNodeInfo profileNode(List<AccessibilityNodeInfo> all, String want) {
+        for (AccessibilityNodeInfo n : all) {
+            String t = norm(deep(n).toLowerCase(Locale.US));
+            if (isProfile(t, want) && !t.contains("pin")) return n;
+        }
+        return null;
+    }
+
+    private static boolean pinned(List<AccessibilityNodeInfo> all, String want) {
+        for (AccessibilityNodeInfo n : all) {
+            String t = norm(deep(n).toLowerCase(Locale.US));
+            if (isProfile(t, want) && t.contains("pin")) return true;
+        }
+        return false;
+    }
+
+    /** A real OK on the thing (focused first), or a real tap in its middle: for apps that take the accessibility press and do nothing. */
+    private static boolean pressReal(Context c, AccessibilityNodeInfo n) {
+        if (!Shell.ready(c, 8000)) return false;
+        try {
+            AccessibilityNodeInfo f = n;
+            for (int i = 0; i < 6 && f != null && !f.isFocusable(); i++) f = f.getParent();
+            if (f != null) {
+                if (!f.isFocused()) {
+                    f.performAction(AccessibilityNodeInfo.ACTION_FOCUS);
+                    Thread.sleep(350);
+                    f.refresh();
+                }
+                if (f.isFocused()) return Shell.key("enter");
+            }
+        } catch (Throwable ignored) {
+        }
+        return tapNode(c, n);
     }
 
     /** "Ethan", "Ethan, profile 1", "Access Ethan's profile" (Disney+, 22/11), "Ethan's profile". */

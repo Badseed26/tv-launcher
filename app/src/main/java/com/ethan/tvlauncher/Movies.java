@@ -478,7 +478,14 @@ final class Movies {
         // and drop any other play link so the web link (a title page) goes instead
         tv = tv.replace("disneyplus.com/play/", "disneyplus.com/browse/entity-").replace("primevideo.com/watch?", "primevideo.com/detail?")
                 .replace("netflix.com/watch/", "netflix.com/title/").replace("&time=0", "");
-        if (Pattern.compile("/(play|watch)\\b").matcher(tv).find()) tv = "";
+        // 23/11: iview's link (iview://video/<id>) went to an episode of Bluey's Auslan version and started it playing.
+        // Any episode or video link goes, and iview gets the show's own page named from the title, never JustWatch's link.
+        if (Pattern.compile("/(play|watch|video|episode)s?\\b").matcher(tv).find()) tv = "";
+        if (pkg.equals("au.net.abc.iview")) {
+            tv = "";
+            String slug = o.optString("title").toLowerCase(Locale.US).replace("&", " and ").replaceAll("[^a-z0-9]+", "-").replaceAll("^-+|-+$", "");
+            url = slug.isEmpty() ? "" : "https://iview.abc.net.au/show/" + slug;
+        }
         if (!tv.isEmpty()) {
             try {
                 Intent i = tv.startsWith("intent:") ? Intent.parseUri(tv, Intent.URI_INTENT_SCHEME) : new Intent(Intent.ACTION_VIEW, Uri.parse(tv));
@@ -587,8 +594,15 @@ final class Movies {
             }
         }, o);
         Thread.sleep(1500);
+        // the link itself must never start it (23/11: iview's did): if it's playing, Back out to the app's menu
+        if (Stream.playingNow(c)) {
+            Shell.key("back");
+            o.put("backedOut", "it started playing as it opened, so the TV pressed Back. Look before doing anything else");
+            TvLog.line(c, "Movies: " + w.optString("tvApp") + " started playing on open, pressed Back");
+        }
         o.put("front", Screen.name(c));
-        o.put("next", "movie.look shows the app's screen, to check it's on the movie's page");
+        o.put("next", "movie.look shows the app's screen, to check it's on the movie's page and it's the title itself, not another version of it"
+                + " (Auslan, Minisodes and the like). Wrong page or the app's home: use the app's search");
         // YouTube's screen can't be read, so nothing here can pick or name the account (22/11)
         if (pkg.equals("com.google.android.youtube.tv")) o.put("account", "YouTube opens on whoever used it last and the TV can't read which. "
                 + "Check the account on tv_screen and tell Ethan, a rental is charged to the account that's active. On its account picker, move with the arrows and enter.");
