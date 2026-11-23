@@ -374,6 +374,16 @@ Ethan asks a chat "find <movie>" and Claude uses `tv_movie` (relay) or `tv_job` 
 - Not yet tested: Paramount+'s show page link, Netflix (links, picker, whether it can be read), a real PIN pad.
   Note each app here once seen.
 
+## Phone page away from home (23/11, open)
+Ethan: the phone page doesn't load on mobile data away from home. Checked from here: the TV was online (relay fine,
+build 106, mid AroFlo job), RemoteServer was answering, and nothing in the page or server treats home and away
+differently (it only checks the caller's address is a Tailscale one). So it's the Tailscale link between phone and TV,
+which nothing on the TV could report. tv.ping says `tailscale: up|down` from the next build (the TV's own Tailscale
+interface, not proof the tunnel passes traffic). To check on the phone, on mobile data: Tailscale connected, the TV
+listed as online, mobile data allowed for Tailscale and Safari, iCloud Private Relay. If the TV's Tailscale drops when
+nobody's home: Always-on VPN for Tailscale on the TV. Not built: the phone page through the Cloudflare relay (no
+Tailscale needed), it would put Ethan's own buttons behind one password on the open internet, his call.
+
 ## AroFlo session limit
 AroFlo caps how many devices can be signed in as one user. When Ethan signs in elsewhere, the TV gets the User
 Session Limit page. Pressing CONTINUE on the TV does NOT sign his PC or phone out (Ethan, 21/11), so the Filer presses

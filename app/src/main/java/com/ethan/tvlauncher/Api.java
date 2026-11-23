@@ -533,6 +533,8 @@ final class Api {
                     o.put("build", Updater.currentVersion(c));
                     o.put("screen", pm != null && pm.isInteractive() ? "on" : "off");
                     o.put("front", Screen.name(c));
+                    // is the TV's Tailscale up (23/11: the phone page wouldn't load away from home and nothing here could say why)
+                    o.put("tailscale", RemoteServer.tailscaleIp() != null ? "up" : "down");
                     o.put("filer", FilerActivity.instance != null);
                     o.put("runner", RunnerActivity.instance != null ? RunnerActivity.state : "closed");
                     o.put("running", running != null ? running.optString("id") + " " + running.optString("do") : "");
