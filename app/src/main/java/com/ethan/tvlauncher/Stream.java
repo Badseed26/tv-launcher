@@ -267,7 +267,7 @@ final class Stream {
     static void afterOpen(Context c, String pkg, String appName, String asked, Runnable again, JSONObject o) {
         HomeButtonService h = HomeButtonService.instance;
         if (h == null) return;
-        long until = System.currentTimeMillis() + 25000, pickedAt = 0;
+        long until = System.currentTimeMillis() + 25000, pickedAt = 0, pickerAt = 0;
         boolean picked = false, retried = false;
         int settled = 0;
         // who Ethan said to watch as this time, else his saved profile (Ethan, 22/11)
@@ -318,6 +318,10 @@ final class Stream {
                     return;
                 }
                 AccessibilityNodeInfo hit = profileNode(all, want);
+                // Stan shows "Who's watching?" a beat before its tiles (23/11: it gave up on Eden with only "Stan logo,
+                // Edit" on screen), so give the names up to 5 s to turn up before saying the profile isn't there
+                if (pickerAt == 0) pickerAt = System.currentTimeMillis();
+                if (hit == null && System.currentTimeMillis() - pickerAt < 5000) continue;
                 if (hit == null && pinned(all, want)) {
                     o.put("profilePicker", want + "'s profile has a PIN, so it stopped on the picker: that one's Ethan's to open");
                     return;
@@ -363,20 +367,7 @@ final class Stream {
     /** A real OK on the thing (focused first), or a real tap in its middle: for apps that take the accessibility press and do nothing. */
     private static boolean pressReal(Context c, AccessibilityNodeInfo n) {
         if (!Shell.ready(c, 8000)) return false;
-        try {
-            AccessibilityNodeInfo f = n;
-            for (int i = 0; i < 6 && f != null && !f.isFocusable(); i++) f = f.getParent();
-            if (f != null) {
-                if (!f.isFocused()) {
-                    f.performAction(AccessibilityNodeInfo.ACTION_FOCUS);
-                    Thread.sleep(350);
-                    f.refresh();
-                }
-                if (f.isFocused()) return Shell.key("enter");
-            }
-        } catch (Throwable ignored) {
-        }
-        return tapNode(c, n);
+        return realPress(c, target(n));
     }
 
     /** "Ethan", "Ethan, profile 1", "Access Ethan's profile" (Disney+, 22/11), "Ethan's profile". */
@@ -452,14 +443,24 @@ final class Stream {
     /**
      * Presses a thing: the accessibility press, and if the app won't take it (Stan's profile tiles, 22/11), focus on it
      * and a real OK, and failing that a real tap in its middle.
+     * 23/11 (Stan, "eden"): the name under a profile tile isn't the tile. The old press climbed from the name to the
+     * whole row of profiles, which "took" the press and did nothing. Now it finds the tile itself (see target), and
+     * when the app won't focus it by accessibility, walks the focus there with real arrow keys before OK.
      */
     private static boolean pressNode(Context c, AccessibilityNodeInfo n) {
-        if (click(n)) return true;
+        AccessibilityNodeInfo t = target(n);
+        if (t.isClickable() && t.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true;
         if (!Shell.ready(c, 8000)) return false;
+        return realPress(c, t);
+    }
+
+    /** Focus on t (accessibility, then real arrow keys) and a real OK, else a real tap in its middle. Shell must be up. */
+    private static boolean realPress(Context c, AccessibilityNodeInfo t) {
         try {
-            AccessibilityNodeInfo f = n;
-            for (int i = 0; i < 6 && f != null && !f.isFocusable(); i++) f = f.getParent();
-            if (f != null) {
+            List<AccessibilityNodeInfo> fs = new ArrayList<>();
+            if (t.isFocusable()) fs.add(t);
+            for (AccessibilityNodeInfo d : nodes(t)) if (d != t && d.isFocusable()) fs.add(d);
+            for (AccessibilityNodeInfo f : fs) {
                 if (!f.isFocused()) {
                     f.performAction(AccessibilityNodeInfo.ACTION_FOCUS);
                     Thread.sleep(350);
@@ -467,9 +468,82 @@ final class Stream {
                 }
                 if (f.isFocused()) return Shell.key("enter");
             }
+            if (focusByKeys(c, t)) return Shell.key("enter");
         } catch (Throwable ignored) {
         }
-        return tapNode(c, n);
+        return tapNode(c, t);
+    }
+
+    /**
+     * The thing to press for n. n itself if it takes presses or focus. Else a wrapper up the tree with the same label
+     * (never a row holding other names too), else something pressable inside it, else the nearest pressable thing (the
+     * picture above a profile name). Falls back to n.
+     */
+    private static AccessibilityNodeInfo target(AccessibilityNodeInfo n) {
+        if (n.isClickable() || n.isFocusable()) return n;
+        String own = norm(deep(n).toLowerCase(Locale.US));
+        android.graphics.Rect nr = new android.graphics.Rect();
+        n.getBoundsInScreen(nr);
+        long nArea = Math.max(1, (long) nr.width() * nr.height());
+        AccessibilityNodeInfo p = n.getParent();
+        for (int i = 0; i < 6 && p != null; i++, p = p.getParent()) {
+            String pl = norm(deep(p).toLowerCase(Locale.US));
+            android.graphics.Rect pr = new android.graphics.Rect();
+            p.getBoundsInScreen(pr);
+            if (own.isEmpty() ? (long) pr.width() * pr.height() > 4 * nArea : !pl.isEmpty() && !pl.equals(own)) break;
+            if (p.isClickable() || p.isFocusable()) return p;
+        }
+        for (AccessibilityNodeInfo d : nodes(n)) if (d != n && (d.isClickable() || d.isFocusable())) return d;
+        HomeButtonService h = HomeButtonService.instance;
+        AccessibilityNodeInfo root = h == null ? null : root(h);
+        if (root == null || nr.isEmpty()) return n;
+        AccessibilityNodeInfo best = null;
+        double bestD = Double.MAX_VALUE;
+        android.graphics.Rect r = new android.graphics.Rect();
+        for (AccessibilityNodeInfo x : nodes(root)) {
+            if (!x.isClickable() && !x.isFocusable()) continue;
+            x.getBoundsInScreen(r);
+            if (r.isEmpty() || r.contains(nr)) continue; // a row or screen holding it, not a neighbour
+            double d = Math.hypot(r.exactCenterX() - nr.exactCenterX(), r.exactCenterY() - nr.exactCenterY());
+            if (d < bestD && d < 2.5 * Math.max(r.height(), nr.height())) {
+                bestD = d;
+                best = x;
+            }
+        }
+        return best != null ? best : n;
+    }
+
+    /** Walks the remote's focus onto t with real arrow keys (Stan's profile tiles, 23/11). True once it's there. */
+    private static boolean focusByKeys(Context c, AccessibilityNodeInfo t) throws InterruptedException {
+        HomeButtonService h = HomeButtonService.instance;
+        if (h == null) return false;
+        android.graphics.Rect tr = new android.graphics.Rect(), fr = new android.graphics.Rect(), was = new android.graphics.Rect();
+        t.getBoundsInScreen(tr);
+        if (tr.isEmpty()) return false;
+        int stuck = 0;
+        for (int i = 0; i < 10; i++) {
+            AccessibilityNodeInfo root = root(h);
+            AccessibilityNodeInfo f = root == null ? null : focused(root);
+            if (f == null) return false;
+            f.getBoundsInScreen(fr);
+            if (onIt(fr, tr)) return true;
+            if (i > 0 && fr.equals(was) && ++stuck >= 2) return false;
+            was.set(fr);
+            float dx = tr.exactCenterX() - fr.exactCenterX(), dy = tr.exactCenterY() - fr.exactCenterY();
+            boolean across = Math.abs(dx) > Math.abs(dy);
+            if (stuck == 1) across = !across; // that way didn't move it, try the other
+            String k = across ? (dx > 0 ? "right" : "left") : (dy > 0 ? "down" : "up");
+            if (!Shell.key(k)) return false;
+            Thread.sleep(400);
+        }
+        return false;
+    }
+
+    /** The focused thing is the target, inside it, or the picture right above or below its name. */
+    private static boolean onIt(android.graphics.Rect f, android.graphics.Rect t) {
+        if (f.contains(t.centerX(), t.centerY()) || t.contains(f.centerX(), f.centerY())) return true;
+        return Math.abs(f.exactCenterX() - t.exactCenterX()) < Math.max(f.width(), t.width()) / 2f
+                && Math.abs(f.exactCenterY() - t.exactCenterY()) < f.height() / 2f + t.height() / 2f + 40;
     }
 
     /** A real finger tap in the middle of a thing (when the app won't take the accessibility press). */

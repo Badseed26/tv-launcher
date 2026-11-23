@@ -384,6 +384,13 @@ Ethan asks a chat "find <movie>" and Claude uses `tv_movie` (relay) or `tv_job` 
   still on "Who's Watching?". A tv_stream press on the same tile (ref "Eden, Jeremy Buttons...") worked first go. Likely
   the picker flickers off between the pick and the link going again, so afterOpen thinks it's past it, sends the link,
   and the link brings the picker back. To look at: after sending the link again, keep watching a few seconds and pick again.
+- 23/11 (Paw Patrol on Stan for Eden, about 10 calls when it should be 1): the auto pick saw "Who's watching?" before
+  Stan drew its tiles (names read only "Stan logo, Edit") and gave up on Eden straight away. Then a press on the name
+  "eden" climbed to the whole row of profiles, which took the press and did nothing. Now the pick gives the names 5 s to
+  turn up, and presses go to the tile itself (`Stream.target`: never a wrapper holding other names, else the pressable
+  thing nearest the name), with focus walked there by real arrow keys (`focusByKeys`) when the app won't take an
+  accessibility focus. Stan's profile names are lowercase ("eden"); matching ignores case. Claude: load tv_movie and
+  tv_stream in one ToolSearch, and pass watchAs for kids shows (Eden).
 - Not yet tested: Paramount+'s show page link, Netflix (links, picker, whether it can be read), a real PIN pad.
   Note each app here once seen.
 
