@@ -218,6 +218,10 @@ Ethan wants everything doable from a chat with the PC off, using the TV as the c
   (`tzFetch`, robots.txt as the page). If the check's back, web.open a Tradezone page so Ethan can tick it.
 - `RunnerActivity` runs api jobs (kind api) on its PC-size hidden page, full screen while they run, then back to how
   the TV was. With more jobs queued it stays open for them.
+- Back to the Filer after back to back jobs (25/11): the Runner waits 4 s after a job before putting the TV back. A job
+  sent in that gap used to look for the Filer, find it closed (it's closed while the Runner's up) and forget it was
+  open, so after a run of 15 or so jobs the TV ended on home and then went off. Now a job in that gap takes on how the
+  TV was before the first one (`restoring`). No extra waiting, jobs still start straight away.
 - Verified 21/11 on build 63: tv.ping in ~10 s, aroflo.search "Four Mile" 21 s (signed itself in), aroflo.task 9530
   18 s with the edited 50A note in it. Remote updates on build 62+ wake a standby TV for the install box and put it
   back to sleep (61 and older couldn't, the install just waited).

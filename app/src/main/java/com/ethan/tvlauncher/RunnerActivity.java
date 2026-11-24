@@ -156,8 +156,16 @@ public class RunnerActivity extends Activity {
         if (on && r == null && FilerActivity.instance == null && !Updater.homeVisible)
             return "Something's on the TV (HDMI or an app), so I'm not taking it over. Try again when it's off or on the home screen.";
         if (Peek.busy) Peek.cancel();
-        j.wasOff = !on;
-        j.filerWasOpen = FilerActivity.instance != null;
+        if (r != null && r.restoring != null) {
+            // landed in the gap before the last job put the TV back: keep how it was before that one
+            // (the Filer's closed while the Runner's up, so asking now would say it wasn't open, 25/11)
+            j.wasOff = r.restoring.wasOff;
+            j.filerWasOpen = r.restoring.filerWasOpen;
+            r.restoring = null;
+        } else {
+            j.wasOff = !on;
+            j.filerWasOpen = FilerActivity.instance != null;
+        }
         if (r != null) {
             r.begin(j);
             return null;
@@ -666,6 +674,7 @@ public class RunnerActivity extends Activity {
     private void finishJob() {
         final Job j = job;
         job = null;
+        restoring = null;
         // web.* jobs keep their page open as a tab for the next request (21/11), like a Chrome tab
         String what = j != null && j.api != null ? j.api.optString("do") : "";
         if ("api".equals(j.kind) && what.startsWith("web.") && !what.equals("web.close") && web != null) {
@@ -721,11 +730,16 @@ public class RunnerActivity extends Activity {
         }
     }
 
+    /** How the TV was before the job that's just finished, while we wait to put it back. A job starting then takes it on. */
+    private Job restoring;
+
     private void restore(final Job j) {
+        restoring = j;
         handler.postDelayed(new Runnable() {
             @Override
             public void run() {
-                if (job != null) return; // another job started in the meantime
+                if (job != null) return; // another job started in the meantime (it took on how the TV was)
+                restoring = null;
                 if (j.filerWasOpen) {
                     Intent i = new Intent(RunnerActivity.this, FilerActivity.class);
                     i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
