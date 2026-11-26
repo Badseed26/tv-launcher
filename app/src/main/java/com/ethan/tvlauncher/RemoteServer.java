@@ -285,14 +285,23 @@ final class RemoteServer {
                     }
                 })));
                 return;
-            case "/api/type":
-                json(out, ok(onMain(new Job() {
+            case "/api/type": {
+                Object typed = onMain(new Job() {
                     @Override
                     public Object run(FilerActivity f) {
                         return f.webType(a.get("text"));
                     }
-                })));
+                });
+                // 26/11: with no Filer page to type on, a Runner page takes it (AroFlo's code page, a supplier's box)
+                if (!Boolean.TRUE.equals(typed)) typed = onTop(new TopJob() {
+                    @Override
+                    public Object run(android.app.Activity t) {
+                        return t instanceof RunnerActivity && ((RunnerActivity) t).webType(a.get("text"));
+                    }
+                });
+                json(out, ok(typed));
                 return;
+            }
             case "/api/key":
                 json(out, ok(onTop(new TopJob() {
                     @Override
@@ -316,14 +325,24 @@ final class RemoteServer {
                     }
                 })));
                 return;
-            case "/api/code":
-                json(out, ok(onMain(new Job() {
+            case "/api/code": {
+                final String digits = String.valueOf(a.get("code")).replaceAll("\\D", "");
+                Object sent = onMain(new Job() {
                     @Override
                     public Object run(FilerActivity f) {
-                        return f.enterAroFloCode(String.valueOf(a.get("code")).replaceAll("\\D", ""));
+                        return f.enterAroFloCode(digits);
                     }
-                })));
+                });
+                // 26/11: Filer closed (or its AroFlo isn't running) and the Runner's on AroFlo's code page: it goes there
+                if (!Boolean.TRUE.equals(sent)) sent = onTop(new TopJob() {
+                    @Override
+                    public Object run(android.app.Activity t) {
+                        return t instanceof RunnerActivity && ((RunnerActivity) t).enterAroFloCode(digits);
+                    }
+                });
+                json(out, ok(sent));
                 return;
+            }
             case "/api/cmd":
                 // TV off and Home (out of whatever he's watching) are Ethan's buttons, not Claude's tools
                 if (viaLink && ("off".equals(a.get("c")) || "home".equals(a.get("c")))) {
@@ -451,7 +470,7 @@ final class RemoteServer {
             @Override
             public void run() {
                 try {
-                    on.set(r.onTradies());
+                    on.set(r.onTradies() || r.onAroFloSignIn()); // 26/11: AroFlo's sign in and code pages are Ethan's too
                 } finally {
                     d.countDown();
                 }

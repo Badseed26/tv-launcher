@@ -36,6 +36,12 @@ public class CodeReceiver extends BroadcastReceiver {
         }
         code = code.replaceAll("\\s", "");
         FilerActivity f = FilerActivity.instance;
+        RunnerActivity rn = RunnerActivity.instance;
+        if (f == null && rn != null && rn.enterAroFloCode(code)) {
+            setResultCode(1);
+            setResultData("Code typed into AroFlo's page on the Runner");
+            return;
+        }
         if (f == null) {
             setResultCode(0);
             setResultData("Filer isn't open on the TV");

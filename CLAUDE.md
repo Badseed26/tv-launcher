@@ -417,7 +417,14 @@ https://login.aroflo.com/") and only the Filer could sign it back in.
 - The code step: after the login AroFlo showed Verify Your Account (6 boxes for the authenticator app code, a "Don't ask
   again for 30 days" tick, Verify), still on login.aroflo.com. Job code never fills or presses that page. A web job
   answers with a look at it; an aroflo job fails saying AroFlo wants the code. Keep the tab up (`keep` 15) and ask Ethan
-  to type the code on the phone page.
+  to put the code in the phone page's AroFlo code box.
+- Typing on a Runner page (26/11, build 112 on). Ethan couldn't get the code in: the phone page's Type box and AroFlo
+  code box only reached Filer pages (`/api/type` and `/api/code` asked FilerActivity only), so on a Runner page taps
+  worked and typing did nothing. Now both fall through to the Runner: `RunnerActivity.webType` sends real keys to the
+  box that has focus, and `enterAroFloCode` (phone page code box, `code <n>` on the Todoist remote, AirHQ) focuses the
+  first code box, types the digits and presses Verify if the page hasn't moved on. AroFlo's own pages only.
+  `/api/code` isn't on the relay's list and the relay can't tap, type or press keys on login.aroflo.com
+  (`onAroFloSignIn`, same rule as Tradies Web): the code is always Ethan's. Not yet tested on the TV.
 
 ## Open items
 - Deep dive on PDF grabs missing on the first go (follow up "Deep dive: why the TV filer misses PDFs"). Best long

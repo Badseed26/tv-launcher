@@ -382,8 +382,10 @@ final class Remote {
                             ? "Asked AroFlo to press " + label + ". Send status to check." : "AroFlo isn't running.";
                 } else if (lc.startsWith("code ")) {
                     String code = cmd.substring(5).replaceAll("\\s", "");
-                    reply = f == null ? "Filer's closed." : f.enterAroFloCode(code)
-                            ? "Code sent to AroFlo. Send status to check." : "AroFlo isn't running.";
+                    RunnerActivity rn = RunnerActivity.instance;
+                    if (f != null && f.enterAroFloCode(code)) reply = "Code sent to AroFlo. Send status to check.";
+                    else if (rn != null && rn.enterAroFloCode(code)) reply = "Code typed into AroFlo's page on the Runner.";
+                    else reply = f == null ? "Filer's closed and the Runner isn't on an AroFlo page." : "AroFlo isn't running.";
                 } else {
                     reply = "Didn't get that. " + HELP;
                 }

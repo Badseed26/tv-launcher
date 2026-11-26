@@ -1355,6 +1355,73 @@ public class RunnerActivity extends Activity {
         return web != null && String.valueOf(web.getUrl()).startsWith("https://tradies.ambrosebuilding.com.au/");
     }
 
+    /** AroFlo's sign in site (login and the Verify Your Account code page). Ethan's own: the relay never taps or types there. */
+    boolean onAroFloSignIn() {
+        return web != null && String.valueOf(web.getUrl()).startsWith("https://login.aroflo.com/");
+    }
+
+    /**
+     * Typing from the phone page into the Runner's page (26/11), like the Filer's: real keys to whatever box has focus
+     * there (tap the box on the picture first). Before this the phone page could tap a Runner page but not type on it.
+     */
+    boolean webType(String text) {
+        WebView w = web;
+        if (w == null || text == null || text.isEmpty()) return false;
+        w.requestFocus();
+        android.view.KeyEvent[] evs = android.view.KeyCharacterMap.load(android.view.KeyCharacterMap.VIRTUAL_KEYBOARD).getEvents(text.toCharArray());
+        if (evs == null) {
+            // something the key map can't do: put it in with the page's own insert
+            w.evaluateJavascript("document.execCommand('insertText',false," + JSONObject.quote(text) + ")", null);
+            return true;
+        }
+        for (android.view.KeyEvent e : evs) w.dispatchKeyEvent(e);
+        return true;
+    }
+
+    /**
+     * AroFlo's Verify Your Account page on the Runner (26/11). Ethan sends his authenticator code from the phone page's
+     * AroFlo code box (or `code <n>` on the Todoist remote, or AirHQ) and it's typed into the page's code boxes, then
+     * Verify is pressed. Digits only, AroFlo's own pages only, and never from job code or the relay.
+     */
+    boolean enterAroFloCode(final String code) {
+        final WebView w = web;
+        if (w == null || code == null || !code.matches("\\d{4,8}")) return false;
+        String host = android.net.Uri.parse(String.valueOf(w.getUrl())).getHost();
+        if (host == null || !(host.equals("aroflo.com") || host.endsWith(".aroflo.com"))) return false;
+        apiLine("AroFlo code came from the phone, typing it in");
+        // focus the first code box (they move along by themselves as each digit goes in)
+        w.evaluateJavascript("(function(){var vis=function(e){var r=e.getBoundingClientRect();return r.width>0&&r.height>0;};"
+                + "var b=[].slice.call(document.querySelectorAll('input')).filter(function(e){return vis(e)&&!e.disabled&&/^(number|tel|text)?$/.test(e.getAttribute('type')||'');});"
+                + "if(!b.length)return 0;b[0].focus();if(b[0].select)try{b[0].select();}catch(x){}return b.length;})()", new android.webkit.ValueCallback<String>() {
+            @Override
+            public void onReceiveValue(String n) {
+                if (n == null || "0".equals(n) || "null".equals(n)) {
+                    apiLine("no code box on the page");
+                    return;
+                }
+                handler.postDelayed(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (web != w) return;
+                        webType(code);
+                    }
+                }, 300);
+                handler.postDelayed(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (web != w) return;
+                        // still on the code page: press Verify (some pages send it themselves on the last digit)
+                        w.evaluateJavascript("(function(){if(!/Verify Your Account|authenticator/i.test(document.body?document.body.innerText:''))return;"
+                                + "var vis=function(e){var r=e.getBoundingClientRect();return r.width>0&&r.height>0;};"
+                                + "var cs=[].slice.call(document.querySelectorAll('button,input[type=submit],[role=button]')).filter(function(e){return vis(e)&&/^\\s*verify\\s*$/i.test(e.textContent||e.value||'');});"
+                                + "if(cs.length==1)cs[0].click();})()", null);
+                    }
+                }, 1800);
+            }
+        });
+        return true;
+    }
+
     /**
      * The phone page's Sign in to site (22/11). Ethan presses it himself: it's his PSEA and his signature, so nothing
      * else on the TV starts it (the relay link can't reach it, and web jobs never press on the safety pages).
