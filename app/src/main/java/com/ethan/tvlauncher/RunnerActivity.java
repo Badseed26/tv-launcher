@@ -876,7 +876,8 @@ public class RunnerActivity extends Activity {
             @Override
             public void onPageFinished(WebView view, String u) {
                 if (view != web || job == null || pageWant == null || bundle == null && !"lookup".equals(job.kind) && !"api".equals(job.kind)) return;
-                boolean apiPage = job != null && "api".equals(job.kind) && u != null && (u.contains("office.aroflo.com") || u.contains("outlook.") || u.contains("login.microsoftonline.com")
+                // 26/11: AroFlo's sign in page moved to login.aroflo.com, so api job code runs there too (it asks for the saved login)
+                boolean apiPage = job != null && "api".equals(job.kind) && u != null && (u.contains("office.aroflo.com") || u.contains("login.aroflo.com") || u.contains("outlook.") || u.contains("login.microsoftonline.com")
                         || "web".equals(pageWant) && u.startsWith("http"));
                 if (u != null && (u.contains("office.aroflo.com") || apiPage) && !pageRan) {
                     handler.postDelayed(new Runnable() {
