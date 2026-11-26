@@ -403,6 +403,17 @@ AroFlo caps how many devices can be signed in as one user. When Ethan signs in e
 Session Limit page. Pressing CONTINUE on the TV does NOT sign his PC or phone out (Ethan, 21/11), so the Filer presses
 it itself any time (at most every 10 min), day or night, and api jobs press it too (jobs/aroflo.js).
 
+## AroFlo sign in page (26/11)
+AroFlo's sign in moved to its own site, login.aroflo.com (one page: Username, Password, Log in, Remember Login, no
+code). Api jobs only knew office.aroflo.com, so a signed out TV sat on that page until the job timed out ("timed out on
+https://login.aroflo.com/") and only the Filer could sign it back in.
+- `jobs/web.js` and `jobs/aroflo.js` count login.aroflo.com as signed out and ask `ecApi.login` once the password box
+  shows (8 s wait, the page draws its boxes late). `afLogin()` already took any aroflo.com host.
+- The Runner runs web job code on any page, so `web.open` on an AroFlo address signs the TV in on any build. For
+  `aroflo.*` jobs the Runner only ran job code on office.aroflo.com; the build after 110 adds login.aroflo.com.
+  Until that build's on the TV: if an aroflo job times out on the sign in page, send a `web.open` for AroFlo home
+  first, then the job again. Never ask Ethan to open the Filer just to sign AroFlo in.
+
 ## Open items
 - Deep dive on PDF grabs missing on the first go (follow up "Deep dive: why the TV filer misses PDFs"). Best long
   term fix: download attachments straight from Outlook with the kept sign-in instead of the preview.

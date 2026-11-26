@@ -95,7 +95,11 @@ ec.run(async function () {
   }
 
   // ---- AroFlo's own pages: session limit and sign in, same as the aroflo jobs
-  if (/office\.aroflo\.com$/.test(location.host)) {
+  // 26/11: AroFlo's sign in page moved to login.aroflo.com (Username, Password, Log in). It draws its boxes a beat
+  // after the page loads, so give the password box a few seconds before deciding.
+  var afSignIn = /^login\.aroflo\.com$/i.test(location.host);
+  if (afSignIn) await ec.waitFor(pwBox, 8000);
+  if (afSignIn || /office\.aroflo\.com$/.test(location.host)) {
     if (/User Session Limit/i.test(ec.text())) {
       S.continues = (S.continues || 0) + 1; ec.save();
       if (S.continues > 3) return ec.fail('AroFlo kept showing the User Session Limit page');

@@ -32,7 +32,13 @@ ec.run(async function () {
     await ec.press({ text: 'continue', exact: false }, { expect: function () { return !/User Session Limit/i.test(ec.text()); }, what: 'AroFlo to let the TV in', timeout: 20000 });
     return; // the page moves on and the job runs again there
   }
-  if ([].slice.call(document.querySelectorAll('input[type=password]')).some(ec.visible) || /\/login/i.test(location.pathname)) {
+  // 26/11: AroFlo's sign in page moved to login.aroflo.com. It draws its boxes a beat after the page loads, so give
+  // the password box a few seconds. (The Runner only runs this code there from the build after 110.)
+  var pwShown = function () { return [].slice.call(document.querySelectorAll('input[type=password]')).some(ec.visible); };
+  var afSignIn = /^login\.aroflo\.com$/i.test(location.host);
+  if (afSignIn) await ec.waitFor(pwShown, 8000);
+  if (afSignIn && !pwShown()) return ec.fail('AroFlo is on its sign-in site with no password box showing, look at it with web.open');
+  if (pwShown() || /\/login/i.test(location.pathname)) {
     // signed out: the TV fills its saved login itself (never seen by this code), at most twice in 30 min
     S.logins = (S.logins || 0) + 1; ec.save();
     if (S.logins > 2) return ec.fail('AroFlo still wants a sign-in after 2 goes with the saved login');
