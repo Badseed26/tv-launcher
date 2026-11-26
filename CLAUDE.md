@@ -404,8 +404,8 @@ Session Limit page. Pressing CONTINUE on the TV does NOT sign his PC or phone ou
 it itself any time (at most every 10 min), day or night, and api jobs press it too (jobs/aroflo.js).
 
 ## AroFlo sign in page (26/11)
-AroFlo's sign in moved to its own site, login.aroflo.com (one page: Username, Password, Log in, Remember Login, no
-code). Api jobs only knew office.aroflo.com, so a signed out TV sat on that page until the job timed out ("timed out on
+AroFlo's sign in moved to its own site, login.aroflo.com (one page: Username, Password, Log in, Remember Login). Api
+jobs only knew office.aroflo.com, so a signed out TV sat on that page until the job timed out ("timed out on
 https://login.aroflo.com/") and only the Filer could sign it back in.
 - `jobs/web.js` and `jobs/aroflo.js` count login.aroflo.com as signed out and ask `ecApi.login` once the password box
   shows (8 s wait, the page draws its boxes late). `afLogin()` already took any aroflo.com host.
@@ -413,6 +413,11 @@ https://login.aroflo.com/") and only the Filer could sign it back in.
   `aroflo.*` jobs the Runner only ran job code on office.aroflo.com; the build after 110 adds login.aroflo.com.
   Until that build's on the TV: if an aroflo job times out on the sign in page, send a `web.open` for AroFlo home
   first, then the job again. Never ask Ethan to open the Filer just to sign AroFlo in.
+- Verified 26/11 on build 110 (branch aroflo-login): `web.open` on AroFlo home filled the saved login by itself in 21 s.
+- The code step: after the login AroFlo showed Verify Your Account (6 boxes for the authenticator app code, a "Don't ask
+  again for 30 days" tick, Verify), still on login.aroflo.com. Job code never fills or presses that page. A web job
+  answers with a look at it; an aroflo job fails saying AroFlo wants the code. Keep the tab up (`keep` 15) and ask Ethan
+  to type the code on the phone page.
 
 ## Open items
 - Deep dive on PDF grabs missing on the first go (follow up "Deep dive: why the TV filer misses PDFs"). Best long

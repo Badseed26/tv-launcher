@@ -37,6 +37,8 @@ ec.run(async function () {
   var pwShown = function () { return [].slice.call(document.querySelectorAll('input[type=password]')).some(ec.visible); };
   var afSignIn = /^login\.aroflo\.com$/i.test(location.host);
   if (afSignIn) await ec.waitFor(pwShown, 8000);
+  // After the saved login AroFlo can ask for the authenticator code (Verify Your Account). That one's Ethan's.
+  if (afSignIn && /Verify Your Account|authenticator app/i.test(ec.text())) return ec.fail('AroFlo wants the authenticator code. Send web.open for AroFlo home with keep 15 and ask Ethan to type the code on the phone page');
   if (afSignIn && !pwShown()) return ec.fail('AroFlo is on its sign-in site with no password box showing, look at it with web.open');
   if (pwShown() || /\/login/i.test(location.pathname)) {
     // signed out: the TV fills its saved login itself (never seen by this code), at most twice in 30 min
