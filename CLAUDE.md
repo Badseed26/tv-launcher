@@ -425,6 +425,11 @@ https://login.aroflo.com/") and only the Filer could sign it back in.
   first code box, types the digits and presses Verify if the page hasn't moved on. AroFlo's own pages only.
   `/api/code` isn't on the relay's list and the relay can't tap, type or press keys on login.aroflo.com
   (`onAroFloSignIn`, same rule as Tradies Web): the code is always Ethan's. Not yet tested on the TV.
+- Build 112 missed the page itself: `remote.html` hid the Type box and the AroFlo code box whenever the Filer was
+  closed, so Ethan still had nowhere to type. Build 113 on shows them while the Runner's up as well (`o.runner`).
+- 26/11 lesson: AroFlo's code page also sits under /Login/ on the sign in site (`/ims/Login/sso/authorize.cfm`). web.js
+  asked for the saved login there, nothing happened and the second go in 30 min was gone. On that site only a real
+  password box counts now, and a web job that can't sign in answers with a look at the page, not a fail.
 
 ## Open items
 - Deep dive on PDF grabs missing on the first go (follow up "Deep dive: why the TV filer misses PDFs"). Best long

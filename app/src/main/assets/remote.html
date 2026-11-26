@@ -99,7 +99,7 @@ function status(){
     if(o.filer&&o.outlook===undefined&&S.prev){o.outlook=S.prev.outlook;o.aroflo=S.prev.aroflo;o.which=S.prev.which;}
     if(o.filer)S.prev=o;
     $('chips').innerHTML='<span class="chip">TV <b>'+(o.on||'-')+'</b></span>'+(o.filer?chip('Outlook',o.outlook)+chip('AroFlo',o.aroflo):'<span class="chip"><b>Filer closed</b></span>')+'<span class="chip">build <b>'+o.build+'</b></span>';
-    $('seg').hidden=!o.filer;$('pagectl').hidden=!o.filer;
+    $('seg').hidden=!o.filer;$('pagectl').hidden=!(o.filer||o.runner); // 26/11: a Runner page takes typing and the AroFlo code too
     $('ourkeys').hidden=!!o.stream;$('stream').hidden=!o.stream;
     if(o.stream)$('snote').textContent=o.shell?'Live picture and real remote keys aren\'t going yet ('+o.shell+'). Until then it\'s a slower picture.':'Tap the picture to press that spot, or move around with the arrows and OK.';
     if(o.filer){document.querySelectorAll('.seg button').forEach(function(b){b.classList.toggle('on',b.dataset.s===(o.which||''));});}
