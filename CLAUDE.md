@@ -427,6 +427,10 @@ https://login.aroflo.com/") and only the Filer could sign it back in.
   (`onAroFloSignIn`, same rule as Tradies Web): the code is always Ethan's. Not yet tested on the TV.
 - Build 112 missed the page itself: `remote.html` hid the Type box and the AroFlo code box whenever the Filer was
   closed, so Ethan still had nowhere to type. Build 113 on shows them while the Runner's up as well (`o.runner`).
+- Build 113 typed into the wrong box: `webType` called `requestFocus` on the Runner's WebView first, and outside touch
+  mode (always, on a TV) that puts the page's focus on its first box and selects it. So a tap put the cursor in
+  Password, then Type wrote over Username. Build 114 on doesn't call it; the keys go to the box the tap focused.
+  Never call requestFocus on the Runner's WebView before typing.
 - 26/11 lesson: AroFlo's code page also sits under /Login/ on the sign in site (`/ims/Login/sso/authorize.cfm`). web.js
   asked for the saved login there, nothing happened and the second go in 30 min was gone. On that site only a real
   password box counts now, and a web job that can't sign in answers with a look at the page, not a fail.

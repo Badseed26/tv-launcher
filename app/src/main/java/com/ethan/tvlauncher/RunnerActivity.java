@@ -1367,7 +1367,9 @@ public class RunnerActivity extends Activity {
     boolean webType(String text) {
         WebView w = web;
         if (w == null || text == null || text.isEmpty()) return false;
-        w.requestFocus();
+        // No requestFocus here: outside touch mode (always, on a TV) a WebView's requestFocus puts the page's focus on its
+        // first box, so every Type landed in Username over the top of what was there (Ethan, 26/11). The keys go to the
+        // box the tap focused without it.
         android.view.KeyEvent[] evs = android.view.KeyCharacterMap.load(android.view.KeyCharacterMap.VIRTUAL_KEYBOARD).getEvents(text.toCharArray());
         if (evs == null) {
             // something the key map can't do: put it in with the page's own insert
