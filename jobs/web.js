@@ -98,7 +98,8 @@ ec.run(async function () {
   // 26/11: AroFlo's sign in page moved to login.aroflo.com (Username, Password, Log in). It draws its boxes a beat
   // after the page loads, so give the password box a few seconds before deciding.
   var afSignIn = /^login\.aroflo\.com$/i.test(location.host);
-  if (afSignIn) await ec.waitFor(pwBox, 8000);
+  var afCode = function () { return !pwBox() && /Verify Your Account|authenticator app/i.test(ec.text()); };
+  if (afSignIn) await ec.waitFor(function () { return pwBox() || afCode(); }, 8000);
   if (afSignIn || /office\.aroflo\.com$/.test(location.host)) {
     if (/User Session Limit/i.test(ec.text())) {
       S.continues = (S.continues || 0) + 1; ec.save();
@@ -106,15 +107,26 @@ ec.run(async function () {
       await ec.press({ text: 'continue', exact: false }, { expect: function () { return !/User Session Limit/i.test(ec.text()); }, what: 'AroFlo to let the TV in', timeout: 20000 });
       return;
     }
-    if (pwBox() || /\/login/i.test(location.pathname)) {
+    // On the sign in site only a real password box counts as signed out: its code page lives under /Login/ too, and
+    // asking for the saved login there did nothing and used up a go (26/11).
+    if (afSignIn ? !!pwBox() : (pwBox() || /\/login/i.test(location.pathname))) {
       S.logins = (S.logins || 0) + 1; ec.save();
-      if (S.logins > 2) return ec.fail('AroFlo still wants a sign-in after 2 goes with the saved login');
-      var ra = window.ecApi.login('__TOKEN__');
-      if (ra != 'ok') return ec.fail('AroFlo is signed out on the TV and it can\'t sign in: ' + ra);
-      ec.leaving = true; await ec.sleep(25000);
-      if (!ec.finished) ec.fail('AroFlo didn\'t move on after the sign-in');
-      return;
+      var ra = S.logins > 2 ? 'it still wants a sign-in after 2 goes with the saved login' : window.ecApi.login('__TOKEN__');
+      if (ra == 'ok') {
+        // the page moves on and the job runs again there, or the code page shows up on this one
+        ec.leaving = true;
+        var codeUp = await ec.waitFor(afCode, 25000, 500);
+        if (ec.finished) return;
+        if (!codeUp) { ec.leaving = false; return ec.fail('AroFlo didn\'t move on after the sign-in'); }
+        ec.leaving = false;
+      } else if (!afSignIn) {
+        return ec.fail('AroFlo is signed out on the TV and it can\'t sign in: ' + ra);
+      } else {
+        // can't sign in by itself right now: hand back a look so Ethan can do it from the phone page
+        ec.log('AroFlo sign in page, not signing in: ' + ra);
+      }
     }
+    if (afSignIn && afCode()) ec.log('AroFlo wants the authenticator code: Ethan puts it in the phone page\'s AroFlo code box');
   }
 
   // ---- Tradies Web (22/11): its sign in page has new (email), classic and internal. Ethan's is new. If the admin
