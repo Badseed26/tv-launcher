@@ -431,6 +431,9 @@ https://login.aroflo.com/") and only the Filer could sign it back in.
   mode (always, on a TV) that puts the page's focus on its first box and selects it. So a tap put the cursor in
   Password, then Type wrote over Username. Build 114 on doesn't call it; the keys go to the box the tap focused.
   Never call requestFocus on the Runner's WebView before typing.
+- Verified 26/11 on build 114: Ethan typed the login into AroFlo's sign in page from the phone page (Filer closed) and
+  got in, and an aroflo.task job straight after answered in 20 s. Not yet seen: the AroFlo code box on the Runner
+  (`enterAroFloCode`), and an aroflo job signing in by itself on login.aroflo.com.
 - 26/11 lesson: AroFlo's code page also sits under /Login/ on the sign in site (`/ims/Login/sso/authorize.cfm`). web.js
   asked for the saved login there, nothing happened and the second go in 30 min was gone. On that site only a real
   password box counts now, and a web job that can't sign in answers with a look at the page, not a fail.
