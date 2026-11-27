@@ -247,7 +247,8 @@ the TV keeps a long poll open to it (`Link.java`), so a tool call reaches the TV
 - The Hub (27/11): Ethan's PC desktop app (Badseed26/Custom-Browser-Hub) links to the same relay as a second
   channel (`/hub/pair`, `/hub/poll`, `/hub/result`, its own key). Tools hub_pair, hub_status, hub_read, hub_run,
   hub_helpers, hub_inbox, hub_activity pass straight to the Hub's connector, where all its rules apply. hub_pair gives
-  a `link <url> <code>` line Ethan pastes in the Hub's Claude panel. Tested 27/11 on wrangler dev: 14 to 23 ms a call.
+  a `link <url> <code>` line Ethan pastes in the Hub's Claude panel. hub_signin (27/11) asks the Hub to sign in with Ethan's saved login
+  (the Hub's back end fills it, Claude only hears signed-in, code-needed, bot-check and so on). Tested 27/11 on wrangler dev: 14 to 23 ms a call.
 - Pairing: tv_pair gives a line to send on the Todoist remote (`link <relay url> <code>`, 15 min, 5 tries). The TV swaps
   the code for its own key (Keystore). `link` says how the link's going, `link off` unpairs.
 - The TV side only runs the phone page's own actions (`RemoteServer.local`, never logins or the PIN) and api jobs, so
