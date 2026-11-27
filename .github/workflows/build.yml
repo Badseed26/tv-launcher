@@ -6,6 +6,7 @@ on:
     # job code and notes load fresh on the TV, they don't need a new build (21/11)
     paths-ignore:
       - 'jobs/**'
+      - 'relay/**'
       - 'CLAUDE.md'
       - 'relay/**'
       - '.github/workflows/relay.yml'

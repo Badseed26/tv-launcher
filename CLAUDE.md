@@ -244,6 +244,10 @@ the TV keeps a long poll open to it (`Link.java`), so a tool call reaches the TV
   it 15 min). Only Claude's own callback addresses can register. Tokens are stored hashed; access 24 h, refresh 60 days.
 - Tools: tv_screen (picture), tv_tap, tv_type, tv_key, tv_scroll, tv_status, tv_filer, tv_view, tv_job (any api job,
   waits for the answer, pictures come back as images), tv_wait, tv_pictures, tv_pair, tv_movie and tv_stream (movie finder).
+- The Hub (27/11): Ethan's PC desktop app (Badseed26/Custom-Browser-Hub) links to the same relay as a second
+  channel (`/hub/pair`, `/hub/poll`, `/hub/result`, its own key). Tools hub_pair, hub_status, hub_read, hub_run,
+  hub_helpers, hub_inbox, hub_activity pass straight to the Hub's connector, where all its rules apply. hub_pair gives
+  a `link <url> <code>` line Ethan pastes in the Hub's Claude panel. Tested 27/11 on wrangler dev: 14 to 23 ms a call.
 - Pairing: tv_pair gives a line to send on the Todoist remote (`link <relay url> <code>`, 15 min, 5 tries). The TV swaps
   the code for its own key (Keystore). `link` says how the link's going, `link off` unpairs.
 - The TV side only runs the phone page's own actions (`RemoteServer.local`, never logins or the PIN) and api jobs, so
