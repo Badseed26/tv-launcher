@@ -217,7 +217,7 @@ export const PAGE = '<!doctype html><html><head><meta charset="utf-8"><meta name
   '<button id="on">Turn on notifications</button><p id="msg"></p></div>' +
   '<div class="box" id="live" hidden><p class="ok" id="state">Notifications are on for this phone.</p><button class="ghost" id="test">Send a test</button><p id="tmsg"></p></div>' +
   '<div class="box" id="recent" hidden><p>Latest</p><ul id="list"></ul></div>' +
-  '</main><script src="/push/app.js"></script></body></html>';
+  '<p style="text-align:center;font-size:11px;color:#4b5363;margin-top:18px">page v3</p></main><script src="/push/app.js?v=3"></script></body></html>';
 
 export const APP = `(function(){
 'use strict';
@@ -244,32 +244,32 @@ function show(){
 $('on').addEventListener('click',function(){
   var code=$('code').value.trim(),msg=$('msg');
   if(!code){say(msg,'Put the code from Claude in first.',true);return;}
-  if(!('serviceWorker' in navigator)||!('PushManager' in window)){say(msg,ios&&!standalone?'Add this page to your Home Screen first, then open it from there.':'This browser can\\'t do notifications.',true);return;}
-  if(!('Notification' in window)){say(msg,ios&&!standalone?'Add this page to your Home Screen first, then open it from there.':'This browser can\\'t do notifications.',true);return;}
-  say(msg,'Turning on...');
-  var stuck=setTimeout(function(){say(msg,'Still going after 25 seconds. Close Hub alerts fully, open it again and try once more.',true);},25000);
-  // The worker's scope is /push (the page's own address, not /push/), so it looks after this page.
-  Promise.resolve().then(function(){return Notification.requestPermission();}).then(function(p){
-    if(p!=='granted')throw new Error('Notifications were not allowed. Allow them in the phone\\'s settings and try again.');
-    return navigator.serviceWorker.register('/push/sw.js',{scope:'/push'});
+  if(!('serviceWorker' in navigator)||!('PushManager' in window)||!('Notification' in window)){say(msg,ios&&!standalone?'Add this page to your Home Screen first, then open it from there.':'This browser can\\'t do notifications.',true);return;}
+  // Each step shows on screen and has its own time limit, so nothing can hang without saying where.
+  var n=0;
+  function step(label,p,ms){n++;var me=n;say(msg,'Step '+me+' of 5: '+label+'...');
+    return new Promise(function(res,rej){var t=setTimeout(function(){rej(new Error('Stuck at step '+me+' ('+label+') for '+Math.round(ms/1000)+' s.'));},ms);
+      Promise.resolve(p).then(function(v){clearTimeout(t);res(v);},function(e){clearTimeout(t);rej(e);});});}
+  // On an iPhone the permission has to be asked right inside the tap, so it goes first, straight away.
+  var ask;try{ask=Notification.permission==='granted'?Promise.resolve('granted'):Notification.requestPermission();}catch(e){ask=Promise.reject(e);}
+  step('asking to allow notifications',ask,60000).then(function(p){
+    if(p!=='granted')throw new Error('Notifications are '+p+'. Turn them on for Hub alerts in Settings, Notifications, then try again.');
+    return step('starting the helper',navigator.serviceWorker.register('/push/sw.js',{scope:'/push'}).then(function(reg){
+      if(reg.active)return reg;
+      return new Promise(function(res,rej){var w=reg.installing||reg.waiting;if(!w){res(reg);return;}
+        w.addEventListener('statechange',function(){if(w.state==='activated')res(reg);else if(w.state==='redundant')rej(new Error('The helper failed to start.'));});});
+    }),20000);
   }).then(function(reg){
-    if(reg.active)return reg;
-    return new Promise(function(res,rej){
-      var w=reg.installing||reg.waiting;if(!w){res(reg);return;}
-      var t=setTimeout(function(){rej(new Error('The notification helper didn\\'t start. Close Hub alerts fully and try again.'));},15000);
-      w.addEventListener('statechange',function(){if(w.state==='activated'){clearTimeout(t);res(reg);}else if(w.state==='redundant'){clearTimeout(t);rej(new Error('The notification helper failed to start.'));}});
-    });
-  }).then(function(reg){
-    return fetch('/push/key',{cache:'no-store'}).then(function(r){return r.json();}).then(function(k){
-      return reg.pushManager.getSubscription().then(function(old){return old?old.unsubscribe():null;}).then(function(){
-        return reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:u8(k.key)});});
+    return step('getting the relay key',fetch('/push/key',{cache:'no-store'}).then(function(r){return r.json();}),15000).then(function(k){
+      return step('signing up with Apple or Google',reg.pushManager.getSubscription().then(function(old){return old?old.unsubscribe():null;}).then(function(){
+        return reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:u8(k.key)});}),30000);
     });
   }).then(function(sub){
     var name=ios?'iPhone':/android/i.test(navigator.userAgent)?'Android phone':'Browser';
-    return fetch('/push/subscribe',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({code:code,sub:sub.toJSON(),name:name})});
-  }).then(function(r){return r.json().then(function(j){if(!r.ok)throw new Error(j.error||('The relay said '+r.status));return j;});})
-  .then(function(j){clearTimeout(stuck);tok=j.token;try{localStorage.setItem('hubPushToken',tok);}catch(e){}say(msg,'');show();})
-  .catch(function(e){clearTimeout(stuck);say(msg,String(e&&e.message||e),true);});
+    return step('saving this phone',fetch('/push/subscribe',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({code:code,sub:sub.toJSON(),name:name})})
+      .then(function(r){return r.json().then(function(j){if(!r.ok)throw new Error(j.error||('The relay said '+r.status));return j;});}),15000);
+  }).then(function(j){tok=j.token;try{localStorage.setItem('hubPushToken',tok);}catch(e){}say(msg,'');show();})
+  .catch(function(e){say(msg,(e&&e.name&&e.name!=='Error'?e.name+': ':'')+String(e&&e.message||e),true);});
 });
 $('test').addEventListener('click',function(){
   var m=$('tmsg');say(m,'Sending...');
