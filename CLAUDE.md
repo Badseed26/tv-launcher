@@ -250,6 +250,12 @@ the TV keeps a long poll open to it (`Link.java`), so a tool call reaches the TV
   a `link <url> <code>` line Ethan pastes in the Hub's Claude panel. hub_signin (27/11) asks the Hub to sign in with Ethan's saved login
   (the Hub's back end fills it, Claude only hears signed-in, code-needed, bot-check and so on). hub_recordings (27/11) reads
   the Teach Claude recordings Ethan sent from the Hub (his own steps on a job, to learn it from). Tested 27/11 on wrangler dev: 14 to 23 ms a call.
+- Phone alerts (28/11, `relay/src/push.js`): web push from the relay straight to Ethan's phone (Apple's or Google's push
+  service only, every message encrypted for the phone, RFC 8291; VAPID keys made by the relay and kept in its storage, never
+  in this repo). phone_pair gives a one-time code (15 min, 5 tries); Ethan opens `<relay>/push` on the phone (iPhone: Add to
+  Home Screen first), puts it in and taps Turn on. phone_notify {title, body, tag} sends (30 an hour, 5 phones, job
+  numbers and what's needed only, never addresses, names or email text); phone_list shows and removes phones. The page lists
+  the last notices (3 days) with the phone's own key and can send itself a test. The Hub doesn't send any yet.
 - Pairing: tv_pair gives a line to send on the Todoist remote (`link <relay url> <code>`, 15 min, 5 tries). The TV swaps
   the code for its own key (Keystore). `link` says how the link's going, `link off` unpairs.
 - The TV side only runs the phone page's own actions (`RemoteServer.local`, never logins or the PIN) and api jobs, so

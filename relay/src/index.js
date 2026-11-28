@@ -9,6 +9,8 @@
 // answers on /hub/result), and its hub_* tools show up in this same connector. Every Hub rule (the button guard, the
 // send block, Ethan's Allow list, Stop all, Act level on or off) runs in the Hub, so the relay can't get round those either.
 
+import { Push, vapidKeys, PAGE, APP, SW, MANIFEST, ICON } from './push.js';
+
 export default {
   async fetch(req, env) {
     return env.HUB.get(env.HUB.idFromName('hub')).fetch(req);
@@ -90,6 +92,16 @@ const HUB_TOOLS = [
   { name: 'hub_activity', description: 'The Hub\'s latest activity log lines (what Ethan, scripts, phones and Claude did), newest first.',
     inputSchema: { type: 'object', properties: { limit: { type: 'number' } } } },
 ];
+// Phone notifications (28/11, push.js): web push from this relay straight to Ethan's phone.
+const PHONE_TOOLS = [
+  { name: 'phone_pair', description: "Make a one-time code (15 min) to turn on Hub alerts on Ethan's phone. Tell him to open the address it gives on his phone (on an iPhone: Share, Add to Home Screen, then open it from the home screen), put the code in and tap Turn on notifications.",
+    inputSchema: { type: 'object', properties: {} } },
+  { name: 'phone_notify', description: "Push a notification to Ethan's phone (works with his PC off). Keep it short and useful: what's ready or what needs him, with job numbers, e.g. title 'Close-outs ready', body '4 jobs ready to submit, 9527 waiting on photos'. Never addresses, customer names, email text, logins or codes. Only when he'd want to know now; 30 an hour tops. tag (optional) replaces an older notice with the same tag.",
+    inputSchema: { type: 'object', properties: { title: { type: 'string' }, body: { type: 'string' }, tag: { type: 'string' } }, required: ['body'] } },
+  { name: 'phone_list', description: "The phones set up for Hub alerts (name, when added, last delivered). remove {id} takes one off.",
+    inputSchema: { type: 'object', properties: { remove: { type: 'string' } } } },
+];
+
 // Relay tool name -> the Hub's own tool name
 const HUB_NAMES = { hub_wait: 'hub_wait', hub_status: 'hub_status', hub_signin: 'hub_signin', hub_recordings: 'hub_recordings', hub_read: 'read_page', hub_run: 'hub_run', hub_helpers: 'hub_helpers', hub_inbox: 'inbox_bundle', hub_activity: 'recent_activity' };
 
@@ -103,6 +115,7 @@ export class Hub {
     this.lastPoll = 0;
     // The Hub app's side, kept apart from the TV's
     this.hub = { cmds: [], pollers: [], waiting: new Map(), lastPoll: 0 };
+    this.push = new Push(ctx.storage);
   }
 
   async fetch(req) {
@@ -125,6 +138,7 @@ export class Hub {
       if (p === '/hub/pair' && m === 'POST') return this.devPair(req, 'hubpair', 'hubkey');
       if (p === '/hub/poll' && m === 'GET') return (await this.devAuth(req, 'hubkey')) ? this.chPoll(this.hub, req) : json({ error: 'bad key' }, 401);
       if (p === '/hub/result' && m === 'POST') return (await this.devAuth(req, 'hubkey')) ? this.chResult(this.hub, req) : json({ error: 'bad key' }, 401);
+      if (p === '/push' || p.startsWith('/push/')) return this.pushRoute(req, p, m, origin);
       if (p === '/tv/pair' && m === 'POST') return this.tvPair(req);
       if (p === '/tv/poll' && m === 'GET') return (await this.tvAuth(req)) ? this.tvPoll(req) : json({ error: 'bad key' }, 401);
       if (p === '/tv/result' && m === 'POST') return (await this.tvAuth(req)) ? this.tvResult(req) : json({ error: 'bad key' }, 401);
@@ -132,6 +146,32 @@ export class Hub {
     } catch (e) {
       return json({ error: 'server_error', error_description: String(e && e.message || e) }, 500);
     }
+  }
+
+  // ------------------------------------------------------------------ phone notifications (push.js)
+  async pushRoute(req, p, m, origin) {
+    const page = (body, type) => new Response(body, { headers: { 'content-type': type, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff',
+      'content-security-policy': "default-src 'self'; style-src 'unsafe-inline'; img-src 'self'; frame-ancestors 'none'", 'referrer-policy': 'no-referrer' } });
+    if (m === 'GET' && p === '/push') return page(PAGE, 'text/html; charset=utf-8');
+    if (m === 'GET' && p === '/push/app.js') return page(APP, 'text/javascript; charset=utf-8');
+    if (m === 'GET' && p === '/push/sw.js') return new Response(SW, { headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store', 'service-worker-allowed': '/push/' } });
+    if (m === 'GET' && p === '/push/manifest.json') return page(MANIFEST, 'application/manifest+json');
+    if (m === 'GET' && p === '/push/icon.svg') return new Response(ICON, { headers: { 'content-type': 'image/svg+xml', 'cache-control': 'public, max-age=86400' } });
+    if (m === 'GET' && p === '/push/key') {
+      return json({ key: (await vapidKeys(this.ctx.storage)).pub });
+    }
+    if (m === 'POST' && p === '/push/subscribe') {
+      const r = await this.push.subscribe(await req.json().catch(() => ({})));
+      return r.status === 200 ? json({ token: r.token, id: r.id }) : json({ error: r.error }, r.status);
+    }
+    const ph = await this.push.phoneByToken(req);
+    if (!ph) return json({ error: 'This phone is not set up (or was taken off). Ask Claude for a new phone code.' }, 401);
+    if (m === 'GET' && p === '/push/recent') return json({ notices: await this.push.recent() });
+    if (m === 'POST' && p === '/push/test') {
+      try { return json(await this.push.send({ title: 'Hub alerts', body: 'Test from this phone. Notifications are working.', tag: 'test' }, origin, ph.id)); }
+      catch (e) { return json({ error: String(e.message || e) }, 429); }
+    }
+    return new Response('Not here', { status: 404 });
   }
 
   // ------------------------------------------------------------------ OAuth
@@ -396,9 +436,9 @@ export class Hub {
   async rpc(method, params, origin) {
     if (method === 'initialize') return {
       protocolVersion: params.protocolVersion || '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'EC TV', version: '1.0' },
-      instructions: 'Ethan\'s TV as Claude\'s computer (tv-launcher repo, CLAUDE.md has the whole api). Use tv_job for AroFlo, Outlook (read only) and web tabs; tv_screen to see the page; tv_movie to find a movie and open it on his streaming apps, tv_stream to drive that app\'s menus. Never send, submit, pay, delete, or touch site safety sign ins: the TV blocks those anyway. The hub_* tools reach Ethan\'s Hub app on his PC (when it\'s on and linked): hub_run does a whole job in one call with the guard and send block on.' };
+      instructions: 'Ethan\'s TV as Claude\'s computer (tv-launcher repo, CLAUDE.md has the whole api). Use tv_job for AroFlo, Outlook (read only) and web tabs; tv_screen to see the page; tv_movie to find a movie and open it on his streaming apps, tv_stream to drive that app\'s menus. Never send, submit, pay, delete, or touch site safety sign ins: the TV blocks those anyway. The hub_* tools reach Ethan\'s Hub app on his PC (when it\'s on and linked): hub_run does a whole job in one call with the guard and send block on. phone_notify pushes a short notice to Ethan\'s phone (phone_pair sets a phone up).' };
     if (method === 'ping') return {};
-    if (method === 'tools/list') return { tools: TOOLS.concat(HUB_TOOLS) };
+    if (method === 'tools/list') return { tools: TOOLS.concat(HUB_TOOLS, PHONE_TOOLS) };
     if (method !== 'tools/call') { const e = new Error('Method not found'); e.code = -32601; throw e; }
     const a = params.arguments || {}, name = params.name;
     try {
@@ -472,6 +512,18 @@ export class Hub {
         return out(await this.send('wait', { id: a.id, wait }, (wait + 25) * 1000));
       }
       case 'tv_pictures': return out(await this.send('shots', { id: a.id, n: a.n || 3 }, 30000));
+      case 'phone_pair': {
+        const code = await this.push.makeCode();
+        return { content: [{ type: 'text', text: 'Ethan opens ' + origin + '/push on his phone within 15 minutes (iPhone: Share, Add to Home Screen, then open Hub alerts from the home screen), puts in the code ' + code + ' and taps Turn on notifications.' }] };
+      }
+      case 'phone_notify': {
+        const r = await this.push.send({ title: a.title, body: a.body, tag: a.tag }, origin);
+        return { content: [{ type: 'text', text: JSON.stringify(r) }], isError: !r.sent };
+      }
+      case 'phone_list': {
+        if (a.remove) { const n = await this.push.remove(String(a.remove)); return { content: [{ type: 'text', text: n ? 'Taken off.' : 'No phone with that id.' }] }; }
+        return { content: [{ type: 'text', text: JSON.stringify(await this.push.list()) }] };
+      }
       case 'hub_pair': {
         const code = rand(4).toUpperCase();
         await this.ctx.storage.put('hubpair', { code, exp: Date.now() + 15 * 60000, tries: 0 });
