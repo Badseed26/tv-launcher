@@ -138,6 +138,7 @@ export class Hub {
       }
       if (p === '/hub/pair' && m === 'POST') return this.devPair(req, 'hubpair', 'hubkey');
       if (p === '/hub/poll' && m === 'GET') return (await this.devAuth(req, 'hubkey')) ? this.chPoll(this.hub, req) : json({ error: 'bad key' }, 401);
+      if (p.startsWith('/hub/phone')) return (await this.devAuth(req, 'hubkey')) ? this.hubPhones(req, p, m, origin) : json({ error: 'bad key' }, 401);
       if (p.startsWith('/hub/alerts')) return (await this.devAuth(req, 'hubkey')) ? this.hubAlerts(req, p, m, origin) : json({ error: 'bad key' }, 401);
       if (p === '/hub/result' && m === 'POST') return (await this.devAuth(req, 'hubkey')) ? this.chResult(this.hub, req) : json({ error: 'bad key' }, 401);
       if (p === '/push' || p.startsWith('/push/')) return this.pushRoute(req, p, m, origin);
@@ -160,10 +161,25 @@ export class Hub {
   // The Hub's side of the alert list: add or update, read back (ticks from the phone), tick, photo.
   async hubAlerts(req, p, m, origin) {
     if (p === '/hub/alerts' && m === 'GET') return json({ items: await this.push.alerts() });
+    if (p === '/hub/alerts/photo' && m === 'GET') {
+      const img = await this.push.getPhoto(new URL(req.url).searchParams.get('id') || '');
+      if (!img) return json({ error: 'no photo' }, 404);
+      const u8 = new Uint8Array(img); let bin = '';
+      for (let i = 0; i < u8.length; i += 0x8000) bin += String.fromCharCode(...u8.subarray(i, i + 0x8000));
+      return json({ image: btoa(bin) });
+    }
     const b = await req.json().catch(() => ({}));
     if (p === '/hub/alerts' && m === 'POST') return json(await this.push.addAlerts(b.items, 'hub', origin));
     if (p === '/hub/alerts/tick' && m === 'POST') return json({ ok: await this.push.tick(b.id, b.done !== false) });
     if (p === '/hub/alerts/photo' && m === 'POST') { const err = await this.push.putPhoto(b.id, b.image); return err ? json({ error: err }, 400) : json({ ok: true }); }
+    return new Response('Not here', { status: 404 });
+  }
+
+  // Phones for Hub Link, from the Hub's own Link panel: a code to add one, the list, and taking one off.
+  async hubPhones(req, p, m, origin) {
+    if (p === '/hub/phone-code' && m === 'POST') return json({ code: await this.push.makeCode(), url: origin + '/push' });
+    if (p === '/hub/phones' && m === 'GET') return json({ phones: await this.push.list() });
+    if (p === '/hub/phones/remove' && m === 'POST') { const b = await req.json().catch(() => ({})); return json({ removed: await this.push.remove(String(b.id || '')) }); }
     return new Response('Not here', { status: 404 });
   }
 
@@ -187,6 +203,18 @@ export class Hub {
     if (!ph) return json({ error: 'This phone is not set up (or was taken off). Ask Claude for a new phone code.' }, 401);
     if (m === 'GET' && (p === '/push/recent' || p === '/push/alerts')) { const items = await this.push.alerts(); return json({ items, notices: items }); }
     if (m === 'POST' && p === '/push/tick') { const b = await req.json().catch(() => ({})); return json({ ok: await this.push.tick(b.id, b.done !== false) }); }
+    // Hub Link's Hub card: status and the last activity, and Stop all, Resume (with the Hub PIN, checked by the Hub
+    // with its own wrong-try waits; never kept here) and leave mode. All of it runs in the Hub by its own rules.
+    if (p === '/push/hub') {
+      try {
+        if (m === 'GET') return json(await this.hubLink('link_status', {}));
+        if (m === 'POST') {
+          const b = await req.json().catch(() => ({}));
+          const args = { do: String(b.do || ''), from: b.from ? String(b.from).slice(0, 10) : undefined, to: b.to ? String(b.to).slice(0, 10) : undefined, pin: b.pin ? String(b.pin).slice(0, 12) : undefined };
+          return json(await this.hubLink('link_do', args));
+        }
+      } catch (e) { return json({ error: String(e.message || e) }, 503); }
+    }
     if (m === 'GET' && p === '/push/photo') {
       const img = await this.push.getPhoto(new URL(req.url).searchParams.get('id') || '');
       return img ? new Response(img, { headers: { 'content-type': 'image/jpeg', 'cache-control': 'private, max-age=3600', 'x-content-type-options': 'nosniff' } }) : new Response('Not here', { status: 404 });
@@ -418,6 +446,12 @@ export class Hub {
     ch.cmds.push({ id, tool, args });
     this.chPump(ch);
     return p;
+  }
+
+  async hubLink(tool, args) {
+    const r = await this.hubSend(tool, args, 25000);
+    if (r && r.error) throw new Error(String(r.error));
+    return (r && r.result) || {};
   }
 
   // The Hub's answer as MCP content: pictures from shot steps go as images, the rest as text.

@@ -206,3 +206,61 @@ test('relay routes: the Hub adds and reads alerts with its key, the phone ticks 
   new Function(APP);
   new Function(SW);
 });
+
+test('Hub Link Hub card: the phone asks through the relay, the Hub answers on its own poll; phones and photos for the Link panel', async () => {
+  const storage = memStorage();
+  const h = new Hub({ storage }, {});
+  h.push.fetch = async () => ({ status: 201 });
+  const O = 'https://relay.example.workers.dev';
+  const go = (p, init) => h.fetch(new Request(O + p, init));
+  const hubKey = 'h'.repeat(64);
+  await storage.put('hubkey', Buffer.from(await subtle.digest('SHA-256', new TextEncoder().encode(hubKey))).toString('hex'));
+  const H = { authorization: 'Bearer ' + hubKey, 'content-type': 'application/json' };
+  // the Hub makes a phone code itself now (its Link panel), and the phone signs up with it
+  let r = await go('/hub/phone-code', { method: 'POST', headers: H });
+  const { code, url } = await r.json();
+  assert.match(code, /^[0-9A-F]{8}$/);
+  assert.equal(url, O + '/push');
+  const ph = await phone();
+  r = await go('/push/subscribe', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code, sub: { endpoint: 'https://web.push.apple.com/QWxs', keys: ph.keys }, name: 'iPhone' }) });
+  const P = { authorization: 'Bearer ' + (await r.json()).token, 'content-type': 'application/json' };
+  r = await go('/hub/phones', { headers: H });
+  const phones = (await r.json()).phones;
+  assert.equal(phones.length, 1);
+  assert.ok(!JSON.stringify(phones).includes('push.apple.com'), 'no push address in the list');
+  // the Hub isn't polling: the phone hears so
+  r = await go('/push/hub', { headers: P });
+  assert.equal(r.status, 503);
+  assert.match((await r.json()).error, /isn't linked/);
+  // the Hub polls; the phone's ask reaches it, and its answer comes back
+  const poll = go('/hub/poll', { headers: H });
+  await new Promise((res) => setTimeout(res, 10));
+  const ask = go('/push/hub', { method: 'POST', headers: P, body: JSON.stringify({ do: 'resume', pin: '123456', junk: 'x'.repeat(50) }) });
+  const cmd = await (await poll).json();
+  assert.equal(cmd.tool, 'link_do');
+  assert.deepEqual(cmd.args, { do: 'resume', pin: '123456' }, 'only what the card sends, cut to size');
+  await go('/hub/result', { method: 'POST', headers: H, body: JSON.stringify({ id: cmd.id, result: { status: { mode: 'running' } } }) });
+  r = await ask;
+  assert.equal((await r.json()).status.mode, 'running');
+  // a Hub refusal (wrong PIN) shows on the phone as an error
+  const poll2 = go('/hub/poll', { headers: H });
+  await new Promise((res) => setTimeout(res, 10));
+  const ask2 = go('/push/hub', { method: 'POST', headers: P, body: JSON.stringify({ do: 'resume', pin: '000000' }) });
+  const cmd2 = await (await poll2).json();
+  await go('/hub/result', { method: 'POST', headers: H, body: JSON.stringify({ id: cmd2.id, error: 'Wrong PIN' }) });
+  r = await ask2;
+  assert.equal(r.status, 503);
+  assert.match((await r.json()).error, /Wrong PIN/);
+  assert.equal((await go('/push/hub', { headers: { authorization: 'Bearer ' + 'z'.repeat(64) } })).status, 401, 'no phone key, no Hub card');
+  // the Link panel's photo comes back as base64 with the Hub's key only
+  await h.push.addAlerts([{ id: 'n-pic-1', level: 'minor', body: 'with a photo' }], 'hub', O);
+  const jpeg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(70000, 5)]);
+  assert.equal(await h.push.putPhoto('n-pic-1', jpeg.toString('base64')), null);
+  r = await go('/hub/alerts/photo?id=n-pic-1', { headers: H });
+  assert.equal(Buffer.from((await r.json()).image, 'base64').length, jpeg.length);
+  assert.equal((await go('/hub/alerts/photo?id=n-pic-1', { headers: P })).status, 401);
+  // taking a phone off
+  r = await go('/hub/phones/remove', { method: 'POST', headers: H, body: JSON.stringify({ id: phones[0].id }) });
+  assert.equal((await r.json()).removed, 1);
+  assert.equal((await go('/push/alerts', { headers: P })).status, 401);
+});

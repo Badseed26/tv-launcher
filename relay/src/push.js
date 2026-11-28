@@ -375,6 +375,9 @@ const CSS2 = '.top{display:flex;align-items:center;gap:10px}.top h1{flex:1}.coun
   '.card img{display:block;width:100%;max-height:320px;object-fit:cover;border-radius:10px;margin-top:10px;background:#111}' +
   '.acts{display:flex;gap:8px;margin-top:10px}.acts a,.acts button{flex:1;text-align:center;text-decoration:none;padding:10px;border-radius:10px;font-weight:600;font-size:14.5px;border:0;width:auto}' +
   '.acts a{background:rgba(255,255,255,.08);color:#e8ecf4}.acts .tick{background:linear-gradient(135deg,#2f9e6a,#2c7a8f);color:#fff}.acts .undo{background:rgba(255,255,255,.08);color:#c4cad5}' +
+  '.hubtop{display:flex;align-items:center;gap:8px}.hubtop b{flex:1;font-size:16px}.hubtop button{width:auto;padding:7px 12px;font-size:13px}' +
+  '.go{background:#2f9e6a !important}.danger{background:linear-gradient(135deg,#d9534f,#b3261e) !important}.row2{display:flex;gap:8px}.row2 input{margin:8px 0 0;text-transform:none;letter-spacing:0;font-size:15px}' +
+  '#hubbox details{margin-top:10px}#hublog li{font-size:13px;color:#c4cad5;padding:6px 0}#hublog small{display:inline;margin:0 6px 0 0}' +
   'details{margin-top:16px}summary{color:#93a0b8;font-size:14px;cursor:pointer;padding:6px 0}.empty{color:#8b93a3;font-size:14px;margin:12px 2px}.done .txt,.done b{color:#8b93a3}';
 
 export const PAGE = '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">' +
@@ -385,9 +388,14 @@ export const PAGE = '<!doctype html><html><head><meta charset="utf-8"><meta name
   '<div class="box" id="setup" hidden><p id="ios" hidden>On an iPhone: tap Share, then <b>Add to Home Screen</b>, and open Hub Link from there first. Notifications only work from the home screen.</p>' +
   '<p>Ask Claude for a phone code, put it in and tap Turn on.</p><input id="code" autocomplete="one-time-code" maxlength="8" placeholder="CODE">' +
   '<button id="on">Turn on notifications</button><p id="msg"></p></div>' +
+  '<div class="box" id="hubbox" hidden><div class="hubtop"><b id="hubstate">Hub</b><button class="ghost" id="hubrefresh">Refresh</button></div><p id="hubsub"></p>' +
+  '<button class="danger" id="hubstop">Stop all</button>' +
+  '<div id="hubresume" hidden><input id="hubpin" type="password" inputmode="numeric" autocomplete="off" maxlength="12" placeholder="Hub PIN"><button class="go" id="hubgo">Resume</button></div>' +
+  '<details><summary>Leave mode</summary><div class="row2"><input id="lfrom" type="date"><input id="lto" type="date"></div><button id="lset" style="margin-top:8px">Set leave</button><button class="ghost" id="lend">End leave now</button></details>' +
+  '<details><summary>Activity</summary><ul id="hublog"></ul></details><p id="hubmsg"></p></div>' +
   '<div id="todo"></div><details id="donebox" hidden><summary id="donesum">Done</summary><div id="done"></div></details>' +
   '<div class="box" id="live" hidden><p class="ok" id="state">Notifications are on for this phone.</p><button class="ghost" id="test">Send a test</button><p id="tmsg"></p></div>' +
-  '<p style="text-align:center;font-size:11px;color:#4b5363;margin-top:18px">Hub Link v4</p></main><script src="/push/app.js?v=4"></script></body></html>';
+  '<p style="text-align:center;font-size:11px;color:#4b5363;margin-top:18px">Hub Link v5</p></main><script src="/push/app.js?v=5"></script></body></html>';
 
 export const APP = `(function(){
 'use strict';
@@ -441,13 +449,42 @@ function load(){
   fetch('/push/alerts',{headers:auth(),cache:'no-store'}).then(function(r){if(r.status===401){gone();return null;}return r.json();})
   .then(function(j){if(j)draw(j.items||[]);}).catch(function(){});
 }
+// ---------- the Hub card: status, Stop all, Resume with the PIN, leave mode, activity ----------
+var hubSt=null;
+function ymd(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function hubDraw(st){
+  hubSt=st;$('hubbox').hidden=false;
+  var s=st.status||{},mode=s.mode||'?',lv=s.leave;
+  $('hubstate').textContent=mode==='running'?'Hub running':mode==='leave'?'Hub on leave':mode==='stopped'?'Hub stopped':'Hub';
+  $('hubsub').textContent=(lv?'Leave '+lv.from+' to '+lv.to+'. ':'')+(st.locked?'Locked on the PC. ':'')+(st.scripts&&st.scripts.length?'Scripts on: '+st.scripts.join(', ')+'.':'');
+  $('hubstop').hidden=mode!=='running';$('hubresume').hidden=mode!=='stopped';
+  $('lend').hidden=!lv;
+  if(!$('lfrom').value){$('lfrom').value=ymd(new Date());var t=new Date();t.setDate(t.getDate()+7);$('lto').value=ymd(t);}
+  var L=$('hublog');L.textContent='';(st.log||[]).slice(0,15).forEach(function(e){var li=el('li');li.appendChild(el('small',null,when(e.ts)));li.appendChild(document.createTextNode([e.actor,e.action,e.site,e.detail].filter(Boolean).join(' ')));L.appendChild(li);});
+}
+function hubLoad(){
+  if(!tok)return;
+  fetch('/push/hub',{headers:auth(),cache:'no-store'}).then(function(r){if(r.status===401){gone();return null;}return r.json().then(function(j){return {ok:r.ok,j:j};});})
+  .then(function(x){if(!x)return;if(!x.ok){$('hubbox').hidden=false;$('hubstate').textContent='Hub';$('hubsub').textContent=x.j.error||'The Hub isn\\'t reachable right now.';$('hubstop').hidden=true;$('hubresume').hidden=true;return;}hubDraw(x.j);}).catch(function(){});
+}
+function hubDo(body,okText){
+  var m=$('hubmsg');say(m,'Asking the Hub...');
+  fetch('/push/hub',{method:'POST',headers:Object.assign({'content-type':'application/json'},auth()),body:JSON.stringify(body)})
+  .then(function(r){return r.json().then(function(j){if(!r.ok||j.error)throw new Error(j.error||r.status);return j;});})
+  .then(function(j){say(m,okText);$('hubpin').value='';hubDraw(j);}).catch(function(e){say(m,String(e&&e.message||e),true);});
+}
+$('hubrefresh').addEventListener('click',hubLoad);
+$('hubstop').addEventListener('click',function(){hubDo({do:'stop'},'Stopped. Everything on the Hub is paused.');});
+$('hubgo').addEventListener('click',function(){var p=$('hubpin').value.trim();if(!p){say($('hubmsg'),'Put your Hub PIN in first.',true);return;}hubDo({do:'resume',pin:p},'Running again.');});
+$('lset').addEventListener('click',function(){hubDo({do:'leave',from:$('lfrom').value,to:$('lto').value},'Leave mode set.');});
+$('lend').addEventListener('click',function(){hubDo({do:'leave-end'},'Leave mode ended.');});
 function show(){
   var has=!!tok,on=('Notification' in window)&&Notification.permission==='granted';
   $('setup').hidden=has;$('live').hidden=!has;$('ios').hidden=!(ios&&!standalone);
   say($('state'),on?'Notifications are on for this phone.':'Notifications are off for this phone. Turn them on for Hub Link in Settings, Notifications.',!on);
   if(on)$('state').className='ok';
-  if(!has){$('todo').textContent='';$('donebox').hidden=true;$('count').hidden=true;return;}
-  load();
+  if(!has){$('todo').textContent='';$('donebox').hidden=true;$('count').hidden=true;$('hubbox').hidden=true;return;}
+  load();hubLoad();
 }
 $('on').addEventListener('click',function(){
   var code=$('code').value.trim(),msg=$('msg');

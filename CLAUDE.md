@@ -255,7 +255,15 @@ the TV keeps a long poll open to it (`Link.java`), so a tool call reaches the TV
   in this repo). phone_pair gives a one-time code (15 min, 5 tries); Ethan opens `<relay>/push` on the phone (iPhone: Add to
   Home Screen first), puts it in and taps Turn on. phone_notify {title, body, tag} sends (30 an hour, 5 phones, job
   numbers and what's needed only, never addresses, names or email text); phone_list shows and removes phones. The page lists
-  the last notices (3 days) with the phone's own key and can send itself a test. The Hub doesn't send any yet.
+  the last notices (3 days) with the phone's own key and can send itself a test.
+  Hub Link (28/11, Ethan): the page is now Hub Link, one running alert list (30 days) shared with the Hub. Alerts have
+  ids, levels (major, minor, hub, info), a tick, a shrunk JPEG photo (400 KB, gone when ticked) and an AroFlo link.
+  Major and hub push straight away in business hours (Mon to Fri 7am to 5:30pm Brisbane), minor waits for the 12pm and
+  4pm roundups, anything held out of hours goes in one 7am summary (the Durable Object's alarm); quiet ones (a first
+  fill-in) never push. The Hub (its key) adds, reads, ticks and fetches photos (`/hub/alerts...`), makes phone codes
+  and lists or removes phones (`/hub/phone...`). The phone's Hub card (`/push/hub`) asks the Hub through its poll
+  (`link_status`, `link_do`: stop, resume with the Hub PIN checked by the Hub, leave, leave-end); the relay never keeps
+  the PIN. Tests: `node --test relay/test/*.test.mjs`.
   Turned on on Ethan's iPhone 28/11 (page v3). Lessons: the helper worker's scope must be `/push` (the page's own
   address; `/push/` never controls it, so setup hung), iPhones only ask for the permission inside the tap itself, and
   Claude keeps a copy of a connector's tool list, so new relay tools need EC TV disconnected and connected again in
