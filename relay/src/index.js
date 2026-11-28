@@ -120,6 +120,7 @@ export class Hub {
 
   async fetch(req) {
     const u = new URL(req.url), p = u.pathname, m = req.method, origin = u.origin;
+    if (this.origin !== origin && /^https:/.test(origin)) { this.origin = origin; await this.ctx.storage.put('origin', origin); }
     try {
       if (p === '/' && m === 'GET') return new Response('EC TV relay', { headers: { 'content-type': 'text/plain' } });
       if (p.startsWith('/.well-known/oauth-protected-resource')) return json({ resource: origin + '/mcp', authorization_servers: [origin], bearer_methods_supported: ['header'] });
@@ -137,6 +138,7 @@ export class Hub {
       }
       if (p === '/hub/pair' && m === 'POST') return this.devPair(req, 'hubpair', 'hubkey');
       if (p === '/hub/poll' && m === 'GET') return (await this.devAuth(req, 'hubkey')) ? this.chPoll(this.hub, req) : json({ error: 'bad key' }, 401);
+      if (p.startsWith('/hub/alerts')) return (await this.devAuth(req, 'hubkey')) ? this.hubAlerts(req, p, m, origin) : json({ error: 'bad key' }, 401);
       if (p === '/hub/result' && m === 'POST') return (await this.devAuth(req, 'hubkey')) ? this.chResult(this.hub, req) : json({ error: 'bad key' }, 401);
       if (p === '/push' || p.startsWith('/push/')) return this.pushRoute(req, p, m, origin);
       if (p === '/tv/pair' && m === 'POST') return this.tvPair(req);
@@ -146,6 +148,23 @@ export class Hub {
     } catch (e) {
       return json({ error: 'server_error', error_description: String(e && e.message || e) }, 500);
     }
+  }
+
+  // The roundups (7am, 12pm, 4pm weekdays): the Durable Object's alarm.
+  async alarm() {
+    const origin = this.origin || (await this.ctx.storage.get('origin')) || '';
+    await this.push.digest(origin);
+    if (((await this.ctx.storage.get('pending')) || []).length) await this.push.armDigest();
+  }
+
+  // The Hub's side of the alert list: add or update, read back (ticks from the phone), tick, photo.
+  async hubAlerts(req, p, m, origin) {
+    if (p === '/hub/alerts' && m === 'GET') return json({ items: await this.push.alerts() });
+    const b = await req.json().catch(() => ({}));
+    if (p === '/hub/alerts' && m === 'POST') return json(await this.push.addAlerts(b.items, 'hub', origin));
+    if (p === '/hub/alerts/tick' && m === 'POST') return json({ ok: await this.push.tick(b.id, b.done !== false) });
+    if (p === '/hub/alerts/photo' && m === 'POST') { const err = await this.push.putPhoto(b.id, b.image); return err ? json({ error: err }, 400) : json({ ok: true }); }
+    return new Response('Not here', { status: 404 });
   }
 
   // ------------------------------------------------------------------ phone notifications (push.js)
@@ -166,7 +185,12 @@ export class Hub {
     }
     const ph = await this.push.phoneByToken(req);
     if (!ph) return json({ error: 'This phone is not set up (or was taken off). Ask Claude for a new phone code.' }, 401);
-    if (m === 'GET' && p === '/push/recent') return json({ notices: await this.push.recent() });
+    if (m === 'GET' && (p === '/push/recent' || p === '/push/alerts')) { const items = await this.push.alerts(); return json({ items, notices: items }); }
+    if (m === 'POST' && p === '/push/tick') { const b = await req.json().catch(() => ({})); return json({ ok: await this.push.tick(b.id, b.done !== false) }); }
+    if (m === 'GET' && p === '/push/photo') {
+      const img = await this.push.getPhoto(new URL(req.url).searchParams.get('id') || '');
+      return img ? new Response(img, { headers: { 'content-type': 'image/jpeg', 'cache-control': 'private, max-age=3600', 'x-content-type-options': 'nosniff' } }) : new Response('Not here', { status: 404 });
+    }
     if (m === 'POST' && p === '/push/test') {
       try { return json(await this.push.send({ title: 'Hub alerts', body: 'Test from this phone. Notifications are working.', tag: 'test' }, origin, ph.id)); }
       catch (e) { return json({ error: String(e.message || e) }, 429); }
@@ -517,8 +541,10 @@ export class Hub {
         return { content: [{ type: 'text', text: 'Ethan opens ' + origin + '/push on his phone within 15 minutes (iPhone: Share, Add to Home Screen, then open Hub alerts from the home screen), puts in the code ' + code + ' and taps Turn on notifications.' }] };
       }
       case 'phone_notify': {
-        const r = await this.push.send({ title: a.title, body: a.body, tag: a.tag }, origin);
-        return { content: [{ type: 'text', text: JSON.stringify(r) }], isError: !r.sent };
+        const id = a.tag && /^[A-Za-z0-9_-]{4,40}$/.test(a.tag) ? 'c-' + a.tag : 'c' + Date.now().toString(36);
+        const r = await this.push.addAlerts([{ id, level: 'info', title: a.title || 'From Claude', body: a.body, renew: true }], 'claude', origin);
+        const sent = r.sent || { sent: 0, note: (await this.push.phones()).length ? 'not sent' : 'No phone is set up yet: make a code with phone_pair and open ' + origin + '/push on the phone' };
+        return { content: [{ type: 'text', text: JSON.stringify(sent) }], isError: !sent.sent };
       }
       case 'phone_list': {
         if (a.remove) { const n = await this.push.remove(String(a.remove)); return { content: [{ type: 'text', text: n ? 'Taken off.' : 'No phone with that id.' }] }; }
