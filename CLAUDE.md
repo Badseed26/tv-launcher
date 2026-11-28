@@ -256,6 +256,10 @@ the TV keeps a long poll open to it (`Link.java`), so a tool call reaches the TV
   Home Screen first), puts it in and taps Turn on. phone_notify {title, body, tag} sends (30 an hour, 5 phones, job
   numbers and what's needed only, never addresses, names or email text); phone_list shows and removes phones. The page lists
   the last notices (3 days) with the phone's own key and can send itself a test. The Hub doesn't send any yet.
+  Turned on on Ethan's iPhone 28/11 (page v3). Lessons: the helper worker's scope must be `/push` (the page's own
+  address; `/push/` never controls it, so setup hung), iPhones only ask for the permission inside the tap itself, and
+  Claude keeps a copy of a connector's tool list, so new relay tools need EC TV disconnected and connected again in
+  Claude's Settings, Connectors. The page shows each step with its own time limit.
 - Pairing: tv_pair gives a line to send on the Todoist remote (`link <relay url> <code>`, 15 min, 5 tries). The TV swaps
   the code for its own key (Keystore). `link` says how the link's going, `link off` unpairs.
 - The TV side only runs the phone page's own actions (`RemoteServer.local`, never logins or the PIN) and api jobs, so
