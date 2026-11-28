@@ -226,6 +226,7 @@ export class Push {
         added++;
       }
       const x = old || it;
+      if (raw.quiet) continue; // the first fill-in of past notes: into the list, no push
       if (x.level === 'info' || ((x.level === 'major' || x.level === 'hub') && inHours(now))) pushNow.push(x);
       else pending.add(x.id);
     }

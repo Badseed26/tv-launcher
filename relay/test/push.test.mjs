@@ -143,6 +143,11 @@ test('edits, ticks, photos and what the lists hold', async () => {
   await p.tick('n-2-a', true);
   assert.equal(await p.getPhoto('n-2-a'), null, 'photo gone once ticked');
   assert.equal(await p.putPhoto('nope', jpeg.toString('base64')), 'no such alert');
+  // quiet ones (the first fill-in of past notes) go in the list without a push or a roundup
+  const q = await p.addAlerts([{ id: 'n-quiet-1', level: 'major', body: 'old note', quiet: true }], 'hub', 'o');
+  assert.deepEqual(q.pushed, []);
+  assert.equal(q.added, 1);
+  assert.ok(!((await p.storage.get('pending')) || []).includes('n-quiet-1'));
   // bad ids and empty bodies are dropped
   const r = await p.addAlerts([{ id: 'x', body: 'short id' }, { id: 'good-id', body: '   ' }, { id: '../../etc', body: 'bad' }], 'hub', 'o');
   assert.equal(r.added, 0);
