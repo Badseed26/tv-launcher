@@ -245,11 +245,21 @@ $('on').addEventListener('click',function(){
   var code=$('code').value.trim(),msg=$('msg');
   if(!code){say(msg,'Put the code from Claude in first.',true);return;}
   if(!('serviceWorker' in navigator)||!('PushManager' in window)){say(msg,ios&&!standalone?'Add this page to your Home Screen first, then open it from there.':'This browser can\\'t do notifications.',true);return;}
+  if(!('Notification' in window)){say(msg,ios&&!standalone?'Add this page to your Home Screen first, then open it from there.':'This browser can\\'t do notifications.',true);return;}
   say(msg,'Turning on...');
-  Notification.requestPermission().then(function(p){
+  var stuck=setTimeout(function(){say(msg,'Still going after 25 seconds. Close Hub alerts fully, open it again and try once more.',true);},25000);
+  // The worker's scope is /push (the page's own address, not /push/), so it looks after this page.
+  Promise.resolve().then(function(){return Notification.requestPermission();}).then(function(p){
     if(p!=='granted')throw new Error('Notifications were not allowed. Allow them in the phone\\'s settings and try again.');
-    return navigator.serviceWorker.register('/push/sw.js',{scope:'/push/'});
-  }).then(function(){return navigator.serviceWorker.ready;}).then(function(reg){
+    return navigator.serviceWorker.register('/push/sw.js',{scope:'/push'});
+  }).then(function(reg){
+    if(reg.active)return reg;
+    return new Promise(function(res,rej){
+      var w=reg.installing||reg.waiting;if(!w){res(reg);return;}
+      var t=setTimeout(function(){rej(new Error('The notification helper didn\\'t start. Close Hub alerts fully and try again.'));},15000);
+      w.addEventListener('statechange',function(){if(w.state==='activated'){clearTimeout(t);res(reg);}else if(w.state==='redundant'){clearTimeout(t);rej(new Error('The notification helper failed to start.'));}});
+    });
+  }).then(function(reg){
     return fetch('/push/key',{cache:'no-store'}).then(function(r){return r.json();}).then(function(k){
       return reg.pushManager.getSubscription().then(function(old){return old?old.unsubscribe():null;}).then(function(){
         return reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:u8(k.key)});});
@@ -258,8 +268,8 @@ $('on').addEventListener('click',function(){
     var name=ios?'iPhone':/android/i.test(navigator.userAgent)?'Android phone':'Browser';
     return fetch('/push/subscribe',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({code:code,sub:sub.toJSON(),name:name})});
   }).then(function(r){return r.json().then(function(j){if(!r.ok)throw new Error(j.error||('The relay said '+r.status));return j;});})
-  .then(function(j){tok=j.token;try{localStorage.setItem('hubPushToken',tok);}catch(e){}say(msg,'');show();})
-  .catch(function(e){say(msg,String(e&&e.message||e),true);});
+  .then(function(j){clearTimeout(stuck);tok=j.token;try{localStorage.setItem('hubPushToken',tok);}catch(e){}say(msg,'');show();})
+  .catch(function(e){clearTimeout(stuck);say(msg,String(e&&e.message||e),true);});
 });
 $('test').addEventListener('click',function(){
   var m=$('tmsg');say(m,'Sending...');

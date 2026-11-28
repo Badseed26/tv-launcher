@@ -154,7 +154,7 @@ export class Hub {
       'content-security-policy': "default-src 'self'; style-src 'unsafe-inline'; img-src 'self'; frame-ancestors 'none'", 'referrer-policy': 'no-referrer' } });
     if (m === 'GET' && p === '/push') return page(PAGE, 'text/html; charset=utf-8');
     if (m === 'GET' && p === '/push/app.js') return page(APP, 'text/javascript; charset=utf-8');
-    if (m === 'GET' && p === '/push/sw.js') return new Response(SW, { headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store', 'service-worker-allowed': '/push/' } });
+    if (m === 'GET' && p === '/push/sw.js') return new Response(SW, { headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store', 'service-worker-allowed': '/push' } });
     if (m === 'GET' && p === '/push/manifest.json') return page(MANIFEST, 'application/manifest+json');
     if (m === 'GET' && p === '/push/icon.svg') return new Response(ICON, { headers: { 'content-type': 'image/svg+xml', 'cache-control': 'public, max-age=86400' } });
     if (m === 'GET' && p === '/push/key') {
